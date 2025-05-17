@@ -1,0 +1,443 @@
+     1                                  ; NASM assembly for DOS playing an enhanced Flappy Bird tune
+     2                                  ; with a centered text mode UI inside an arcade-style border.
+     3                                  ; Background is changed to cyan (entire inner area and text background).
+     4                                  ; Exit message changed to "Press ESC to Start Loading Your Game".
+     5                                  ; To assemble and run (e.g., in DOSBox):
+     6                                  ; nasm arcade_flappy_tune_ui_arcade_cyan_textbg.asm -f bin -o haribird.com
+     7                                  ; haribird.com
+     8                                  
+     9                                  use16
+    10                                  org 0x100
+    11                                  
+    12                                  start:
+    13                                      ; Initialize music state
+    14 00000000 C706[B303][DF01]            mov word [current_music_note_ptr], music_flappy_theme
+    15 00000006 C706[B503]0000              mov word [current_note_duration_counter], 0
+    16 0000000C C606[B703]00                mov byte [is_music_playing_note], 0
+    17 00000011 C706[B803]0000              mov word [game_timer], 0
+    18                                  
+    19                                      ; Clear screen and set text mode
+    20 00000017 B80300                      mov ax, 0x0003  ; 80x25 text mode
+    21 0000001A CD10                        int 0x10
+    22 0000001C B800B8                      mov ax, 0xb800
+    23 0000001F 8EC0                        mov es, ax      ; Set ES to video memory segment
+    24 00000021 31FF                        xor di, di      ; Start at top-left (0,0)
+    25 00000023 B9D007                      mov cx, 2000    ; Total character cells (80*25)
+    26                                      ; Use black on black attribute with space char for clear (0x00 = black on black, 0x20 = space)
+    27 00000026 B82000                      mov ax, 0x0020
+    28 00000029 F3AB                        rep stosw       ; Fill screen with black spaces
+    29                                  
+    30                                      ; --- Draw Arcade Border ---
+    31                                      ; Uses double line characters: ╔═╗, ║, ╚═╝
+    32                                      ; Attribute for border: e.g., Light Green on Black (0x0A)
+    33 0000002B B40A                        mov ah, 0x0A ; Light Green on Black attribute
+    34                                  
+    35                                      ; Draw top border (Row 0)
+    36 0000002D BF0000                      mov di, 0
+    37 00000030 A0[D901]                    mov al, [border_chars]  ; ╔
+    38 00000033 AB                          stosw
+    39 00000034 B94E00                      mov cx, 78
+    40 00000037 A0[DA01]                    mov al, [border_chars+1]; ═
+    41 0000003A F3AB                        rep stosw
+    42 0000003C A0[DB01]                    mov al, [border_chars+2]; ╗
+    43 0000003F AB                          stosw
+    44                                  
+    45                                      ; Draw side borders (rows 1 to 23)
+    46 00000040 B91700                      mov cx, 23              ; Number of rows for sides (25 total rows - top row 0 - bottom row 24 = 23)
+    47 00000043 BFA000                      mov di, 80 * 2          ; Start at Row 1, Col 0 (80 columns * 2 bytes/cell)
+    48                                  .side_border_loop:
+    49 00000046 51                          push cx                 ; Save outer loop counter
+    50 00000047 89FB                        mov bx, di              ; Save start of current row DI to BX
+    51                                  
+    52                                      ; Draw left side character '║' (Col 0)
+    53 00000049 A0[DC01]                    mov al, [border_chars+3]; ║
+    54 0000004C B40A                        mov ah, 0x0A            ; Attribute Light Green on Black
+    55 0000004E AB                          stosw
+    56                                  
+    57                                      ; Skip to the last column for the right side (Col 79)
+    58 0000004F 81C79C00                    add di, (79 - 1) * 2    ; Move DI from Col 0 to Col 79 (79 columns * 2 bytes/cell) - 1 column already written on the left
+    59 00000053 A0[DC01]                    mov al, [border_chars+3]; ║
+    60 00000056 B40A                        mov ah, 0x0A            ; Attribute Light Green on Black
+    61 00000058 AB                          stosw
+    62                                  
+    63                                      ; Move DI to the start of the next row's side border position (Col 0)
+    64 00000059 89DF                        mov di, bx              ; Restore BX (start of current row) to DI
+    65 0000005B 81C7A000                    add di, 80 * 2          ; Add 80 columns * 2 bytes/cell to move to the start of the next row (Col 0)
+    66                                  
+    67 0000005F 59                          pop cx                  ; Restore outer loop counter
+    68 00000060 E2E4                        loop .side_border_loop  ; Repeat for next row
+    69                                  
+    70                                      ; Draw bottom border (Row 24)
+    71 00000062 BF000F                      mov di, 24 * 80 * 2     ; Start at bottom-left (Row 24, Col 0)
+    72 00000065 A0[DD01]                    mov al, [border_chars+4]; ╚
+    73 00000068 B40A                        mov ah, 0x0A            ; Attribute Light Green on Black
+    74 0000006A AB                          stosw
+    75 0000006B B94E00                      mov cx, 78              ; 78 horizontal segments
+    76 0000006E A0[DA01]                    mov al, [border_chars+1]; ═
+    77 00000071 B40A                        mov ah, 0x0A            ; Attribute Light Green on Black
+    78 00000073 F3AB                        rep stosw
+    79 00000075 A0[DE01]                    mov al, [border_chars+5]; ╝
+    80 00000078 B40A                        mov ah, 0x0A            ; Attribute Light Green on Black
+    81 0000007A AB                          stosw
+    82                                  
+    83                                      ; --- Fill Inside Border with Cyan Background ---
+    84                                      ; Loop through rows 1 to 23, columns 1 to 78
+    85 0000007B BB0100                      mov bx, 1 ; Row counter (starts at 1)
+    86                                  .cyan_row_loop:
+    87 0000007E 81FB1800                    cmp bx, 24 ; Loop while row < 24 (i.e., rows 1 through 23)
+    88 00000082 7D21                        jge .end_cyan_fill
+    89                                  
+    90                                      ; Calculate start DI for current row (Col 1)
+    91 00000084 89D8                        mov ax, bx      ; AX = row
+    92 00000086 B150                        mov cl, 80
+    93 00000088 F6E1                        mul cl          ; AX = row * 80
+    94 0000008A 050100                      add ax, 1       ; AX = row * 80 + 1 (Column 1)
+    95 0000008D 89C7                        mov di, ax
+    96 0000008F D1E7                        shl di, 1       ; DI = (row * 80 + 1) * 2 (Byte offset)
+    97                                  
+    98                                      ; Fill columns 1 to 78 in this row
+    99 00000091 53                          push bx         ; Save row counter as CX will be used by LOOP
+   100 00000092 B94E00                      mov cx, 78      ; Column counter (fill 78 columns)
+   101                                      ; CHANGED: Fill with Space character (0x20) with Black (0) on Cyan (3) attribute (0x30)
+   102 00000095 B82030                      mov ax, 0x3020  ; <-- CORRECTED ATTRIBUTE for Cyan Background
+   103                                  .cyan_col_loop:
+   104 00000098 268905                      mov word [es:di], ax
+   105 0000009B 81C70200                    add di, 2
+   106 0000009F E2F7                        loop .cyan_col_loop
+   107 000000A1 5B                          pop bx          ; Restore row counter
+   108                                  
+   109 000000A2 43                          inc bx          ; Move to the next row
+   110 000000A3 EBD9                        jmp .cyan_row_loop
+   111                                  .end_cyan_fill:
+   112                                  
+   113                                      ; --- Draw Foreground UI (Title, Exit Msg) ---
+   114                                      ; These will use Cyan as their background color, keeping the original text color.
+   115                                  
+   116                                      ; Title: "Haribirds Tiny Wing Escape"
+   117                                      ; Length = 28 characters
+   118                                      ; Centering within the 80-column screen: (80 - 28) / 2 = 26
+   119                                      ; Placed around row 11 or 12 inside the border (usable rows 1-23)
+   120 000000A5 BF1407                      mov di, (11 * 80 + 26) * 2 ; Row 11, Col 26
+   121 000000A8 BE[9901]                    mov si, title_msg
+   122                                  .title_loop:
+   123 000000AB AC                          lodsb           ; Load byte from DS:SI into AL, increment SI
+   124 000000AC 08C0                        or al, al       ; Check if it's the null terminator (0)
+   125 000000AE 7405                        jz .title_done  ; If zero, message is finished
+   126                                      ; Attribute: Bright Yellow (E) on Cyan (3) -> 0x3E
+   127 000000B0 B43E                        mov ah, 0x3E
+   128 000000B2 AB                          stosw           ; Store AL (character) and AH (attribute) at ES:DI, increment DI by 2
+   129 000000B3 EBF6                        jmp .title_loop
+   130                                  .title_done:
+   131                                  
+   132                                      ; Exit Instruction: "Press ESC to Start Loading Your Game"
+   133                                      ; Length = 34 characters
+   134                                      ; Centering within the 80-column screen: (80 - 34) / 2 = 23
+   135                                      ; Row: Below title, e.g., Row 13
+   136 000000B5 BF4E08                      mov di, (13 * 80 + 23) * 2 ; Row 13, Col 23 (Updated position for centering)
+   137 000000B8 BE[B401]                    mov si, exit_msg
+   138                                  .exit_msg_loop:
+   139 000000BB AC                          lodsb           ; Load byte from DS:SI into AL, increment SI
+   140 000000BC 08C0                        or al, al       ; Check if it's the null terminator (0)
+   141 000000BE 7405                        jz .exit_msg_done ; If zero, message is finished
+   142                                      ; Attribute: Bright White (F) on Cyan (3) -> 0x3F
+   143 000000C0 B43F                        mov ah, 0x3F
+   144 000000C2 AB                          stosw           ; Store AL (character) and AH (attribute) at ES:DI, increment DI by 2
+   145 000000C3 EBF6                        jmp .exit_msg_loop
+   146                                  .exit_msg_done:
+   147                                  
+   148                                      ; --- End UI Drawing ---
+   149                                  
+   150                                  
+   151                                  main_loop:
+   152                                      ; Simulate a game loop delay using INT 1Ah timer ticks
+   153                                      ; This effectively paces the music at the 18.2 Hz timer interrupt rate
+   154 000000C5 E81D00                      call wait_frame
+   155                                  
+   156                                      ; --- Call our music player ---
+   157 000000C8 E83D00                      call play_music_tick
+   158                                  
+   159                                      ; --- Check for ESC key ---
+   160                                      ; BIOS check for keystroke doesn't wait, just checks buffer status
+   161 000000CB B401                        mov ah, 0x01
+   162 000000CD CD16                        int 0x16
+   163 000000CF 740A                        jz .continue_loop ; Zero flag set means no key pressed, continue loop
+   164                                  
+   165                                      ; Key was pressed, read it to clear the keyboard buffer and get value
+   166                                      ; BIOS read keystroke waits if buffer empty, but we know it's not because AH=01 returned non-zero
+   167 000000D1 B400                        mov ah, 0x00
+   168 000000D3 CD16                        int 0x16
+   169                                  
+   170 000000D5 3C1B                        cmp al, 0x1B    ; Compare AL with ESC key ASCII (0x1B)
+   171                                      ; Although the message says "Start Loading", pressing ESC will still exit
+   172                                      ; the program as that is the original functionality tied to this key press.
+   173 000000D7 0F840200                    je near exit_program ; If ESC, jump to exit (simulating "loading" then exiting demo)
+   174                                  
+   175                                  .continue_loop:
+   176 000000DB EBE8                        jmp main_loop   ; Continue the game/music loop
+   177                                  
+   178                                  
+   179                                  exit_program:
+   180                                      ; --- Turn off speaker before exiting ---
+   181 000000DD E81A00                      call stop_music_explicitly
+   182                                  
+   183 000000E0 B8004C                      mov ax, 0x4C00  ; DOS exit function (AH=4Ch, AL=exit code 00h)
+   184 000000E3 CD21                        int 0x21
+   185                                  
+   186                                  
+   187                                  ; --- Subroutines ---
+   188                                  
+   189                                  ; wait_frame: Corrected to wait for a timer tick
+   190                                  ; Waits for the INT 1Ah timer low word to change, indicating a tick has occurred.
+   191                                  ; This provides a ~18.2 Hz frame rate (the rate of the system timer).
+   192                                  wait_frame:
+   193 000000E5 52                          push dx ; Save DX on the stack
+   194 000000E6 B400                        mov ah, 0x00 ; Get system time (CX:DX = ticks since midnight)
+   195 000000E8 CD1A                        int 0x1a
+   196                                      ; DX now holds the low word of the timer ticks at the start of the wait
+   197                                  .wait_loop_corrected:
+   198 000000EA 52                          push dx ; Save the value of DX from the previous INT 1Ah call
+   199 000000EB B400                        mov ah, 0x00 ; Get system time again
+   200 000000ED CD1A                        int 0x1a
+   201 000000EF 5B                          pop bx ; Restore the previous DX value into BX for comparison
+   202 000000F0 39DA                        cmp dx, bx ; Compare current DX with the value from before the second INT 1a call
+   203 000000F2 74F6                        je .wait_loop_corrected ; If they are the same, the timer hasn't ticked, loop
+   204                                      ; Timer has ticked (DX is different from BX)
+   205 000000F4 FF06[B803]                  inc word [game_timer] ; Increment game timer (optional, but useful)
+   206 000000F8 5A                          pop dx ; Restore the original DX from the stack (saved at the beginning of the subroutine)
+   207 000000F9 C3                          ret
+   208                                  
+   209                                  
+   210                                  stop_music_explicitly:
+   211 000000FA 50                          push ax
+   212 000000FB E461                        in al, 0x61
+   213 000000FD 24FC                        and al, 0xFC ; Clear bits 0 and 1 to turn off speaker
+   214 000000FF E661                        out 0x61, al
+   215 00000101 C606[B703]00                mov byte [is_music_playing_note], 0
+   216 00000106 58                          pop ax
+   217 00000107 C3                          ret
+   218                                  
+   219                                  play_music_tick:
+   220 00000108 50                          push ax
+   221 00000109 53                          push bx
+   222 0000010A 56                          push si
+   223                                  
+   224 0000010B 8B36[B303]                  mov si, [current_music_note_ptr]
+   225                                  
+   226 0000010F 813CFFFF                    cmp word [si], 0xFFFF ; Check for end of song marker
+   227 00000113 7466                        je .restart_music_sequence
+   228                                  
+   229 00000115 813E[B503]0000              cmp word [current_note_duration_counter], 0 ; Is the current note duration finished?
+   230 0000011B 7F46                        jg .decrement_music_duration                ; If > 0, just decrement
+   231                                  
+   232                                  .load_next_music_segment:
+   233                                      ; Stop the current note if playing
+   234 0000011D E461                        in al, 0x61
+   235 0000011F 24FC                        and al, 0xFC
+   236 00000121 E661                        out 0x61, al
+   237 00000123 C606[B703]00                mov byte [is_music_playing_note], 0
+   238                                  
+   239                                      ; Load frequency and duration for the next note/rest
+   240 00000128 8B04                        mov ax, [si]    ; AX = frequency (0 for rest)
+   241 0000012A 8B5C02                      mov bx, [si+2]  ; BX = duration
+   242                                  
+   243                                      ; Basic validation (duration must be positive)
+   244 0000012D 81FB0000                    cmp bx, 0
+   245 00000131 7E37                        jle .handle_invalid_duration ; Skip if duration is invalid or zero (shouldn't happen with valid data)
+   246                                  
+   247                                      ; Set the new duration counter
+   248 00000133 891E[B503]                  mov [current_note_duration_counter], bx
+   249                                  
+   250                                      ; Advance the music pointer
+   251 00000137 81C60400                    add si, 4
+   252 0000013B 8936[B303]                  mov [current_music_note_ptr], si
+   253                                  
+   254                                      ; Check if it's a rest (frequency is 0)
+   255 0000013F 3D0000                      cmp ax, 0
+   256 00000142 741A                        je .music_segment_is_rest ; If frequency is 0, it's a rest
+   257                                  
+   258                                      ; If it's a note, set up the PIT channel 2
+   259 00000144 50                          push ax ; Save frequency
+   260 00000145 B0B6                        mov al, 0xB6 ; Channel 2, Square wave, LSB then MSB
+   261 00000147 E643                        out 0x43, al
+   262 00000149 58                          pop ax ; Restore frequency (divisor)
+   263 0000014A E642                        out 0x42, al ; Write LSB
+   264 0000014C 88E0                        mov al, ah
+   265 0000014E E642                        out 0x42, al ; Write B
+   266                                  
+   267                                      ; Enable speaker (bits 0 and 1 of port 0x61)
+   268 00000150 E461                        in al, 0x61
+   269 00000152 0C03                        or al, 0x03
+   270 00000154 E661                        out 0x61, al
+   271 00000156 C606[B703]01                mov byte [is_music_playing_note], 1 ; Mark that a note is playing
+   272                                  
+   273 0000015B E93700                      jmp .music_tick_done_quit ; Note started, done for this tick
+   274                                  
+   275                                  .music_segment_is_rest:
+   276                                      ; Speaker is already off from .load_next_music_segment
+   277 0000015E C606[B703]00                mov byte [is_music_playing_note], 0 ; Mark that it's a rest (no note playing)
+   278                                      ; Fall through to decrement_music_duration or done_quit
+   279                                  
+   280                                  .decrement_music_duration:
+   281 00000163 FF0E[B503]                  dec word [current_note_duration_counter]
+   282                                      ; Done processing for this tick, either decremented or started new segment
+   283 00000167 E92B00                      jmp .music_tick_done_quit
+   284                                  
+   285                                  .handle_invalid_duration:
+   286                                      ; Skip the invalid segment
+   287 0000016A 81C60400                    add si, 4
+   288 0000016E 8936[B303]                  mov [current_music_note_ptr], si
+   289 00000172 C706[B503]0000              mov word [current_note_duration_counter], 0 ; Ensure duration is 0 so it tries to load next
+   290 00000178 E91A00                      jmp .music_tick_done_quit
+   291                                  
+   292                                  .restart_music_sequence:
+   293 0000017B C706[B303][DF01]            mov word [current_music_note_ptr], music_flappy_theme ; Reset pointer to start of song
+   294 00000181 C706[B503]0000              mov word [current_note_duration_counter], 0 ; Reset duration counter
+   295                                      ; Ensure speaker is off when restarting
+   296 00000187 E461                        in al, 0x61
+   297 00000189 24FC                        and al, 0xFC
+   298 0000018B E661                        out 0x61, al
+   299 0000018D C606[B703]00                mov byte [is_music_playing_note], 0
+   300 00000192 E90000                      jmp .music_tick_done_quit
+   301                                  
+   302                                  .music_tick_done_quit:
+   303 00000195 5E                          pop si
+   304 00000196 5B                          pop bx
+   305 00000197 58                          pop ax
+   306 00000198 C3                          ret
+   307                                  
+   308                                  
+   309                                  ; --- Data ---
+   310 00000199 486172696269726473-     title_msg       db "Haribirds Tiny Wing Escape", 0
+   311 000001A2 2054696E792057696E-
+   312 000001AB 672045736361706500 
+   313 000001B4 507265737320455343-     exit_msg        db "Press ESC to Start Loading Your Game", 0 ; --- UPDATED MESSAGE ---
+   314 000001BD 20746F205374617274-
+   315 000001C6 204C6F6164696E6720-
+   316 000001CF 596F75722047616D65-
+   317 000001D8 00                 
+   318                                  
+   319                                  ; Double line border characters (ASCII)
+   320                                  ; ╔═╗ ║ ╚╝
+   321 000001D9 C9CDBBBAC8BC            border_chars    db 0xC9, 0xCD, 0xBB, 0xBA, 0xC8, 0xBC
+   322                                  
+   323                                  ; music_flappy_theme: (Frequency, Duration) pairs. Duration is in timer ticks (18.2Hz)
+   324                                  ; Frequencies are calculated as 1193180 / desired_frequency
+   325                                  ; Durations are approximately: S=1 tick, E=2 ticks, Q=4 ticks, H=8 ticks, W=16 ticks, DQ=6 ticks, DH=12 ticks.
+   326                                  ; Staccato E represented as (Note, 1), (Rest, 1) pair, totaling 2 ticks.
+   327                                  music_flappy_theme:
+   328                                      ; Part A - Main Motif (Staccato & Bouncy feel)
+   329                                      ; C5 E_stac, G5 E_stac, E5 E_stac, G5 E_stac, C6 DQ, R Q
+   330 000001DF E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac (Note 1, Rest 1) -> 2 ticks total
+   331 000001E7 F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac (Note 1, Rest 1)
+   332 000001EF 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac (Note 1, Rest 1)
+   333 000001F7 F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac (Note 1, Rest 1)
+   334 000001FF 74040600                    dw 1140,6,          ; C6 DQ (Note 6)
+   335 00000203 00000400                    dw 0,4,             ; Rest Q (Rest 4)
+   336                                  
+   337                                      ; Part A Variation 1 - Uses F#5, also bouncy
+   338                                      ; D5 E_stac, A5 E_stac, F#5 E_stac, A5 E_stac, D6 DQ, R Q
+   339 00000207 EE07010000000100            dw 2030,1,  0,1,    ; D5 E_stac
+   340 0000020F 4C05010000000100            dw 1356,1,  0,1,    ; A5 E_stac
+   341 00000217 4C06010000000100            dw 1612,1,  0,1,    ; F#5 E_stac
+   342 0000021F 4C05010000000100            dw 1356,1,  0,1,    ; A5 E_stac
+   343 00000227 F7030600                    dw 1015,6,          ; D6 DQ
+   344 0000022B 00000400                    dw 0,4,             ; R Q
+   345                                  
+   346                                      ; Repeat Main Motif
+   347                                      ; C5 E_stac, G5 E_stac, E5 E_stac, G5 E_stac, C6 DQ, R Q
+   348 0000022F E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   349 00000237 F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   350 0000023F 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   351 00000247 F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   352 0000024F 74040600                    dw 1140,6,          ; C6 DQ
+   353 00000253 00000400                    dw 0,4,             ; R Q
+   354                                  
+   355                                      ; Part A Ending - A bit more melodic run
+   356                                      ; E5 E_stac, C5 E_stac, A4 E_stac, G4 Q_full, Rest Q_full
+   357 00000257 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   358 0000025F E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   359 00000267 980A010000000100            dw 2712,1,  0,1,    ; A4 E_stac (lower A)
+   360 0000026F E40B0400                    dw 3044,4,          ; G4 Q_full (lower G, held 4 ticks)
+   361 00000273 00000400                    dw 0,4,             ; Rest Q_full
+   362                                  
+   363                                      ; -- Repeat Part A Block (more bouncy notes) --
+   364 00000277 E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   365 0000027F F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   366 00000287 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   367 0000028F F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   368 00000297 74040600                    dw 1140,6,          ; C6 DQ
+   369 0000029B 00000400                    dw 0,4,             ; R Q
+   370                                  
+   371 0000029F EE07010000000100            dw 2030,1,  0,1,    ; D5 E_stac
+   372 000002A7 4C05010000000100            dw 1356,1,  0,1,    ; A5 E_stac
+   373 000002AF 4C06010000000100            dw 1612,1,  0,1,    ; F#5 E_stac
+   374 000002B7 4C05010000000100            dw 1356,1,  0,1,    ; A5 E_stac
+   375 000002BF F7030600                    dw 1015,6,          ; D6 DQ
+   376 000002C3 00000400                    dw 0,4,             ; R Q
+   377                                  
+   378 000002C7 E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   379 000002CF F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   380 000002D7 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   381 000002DF F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   382 000002E7 74040600                    dw 1140,6,          ; C6 DQ
+   383 000002EB 00000400                    dw 0,4,             ; R Q
+   384                                  
+   385 000002EF 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   386 000002F7 E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   387 000002FF 980A010000000100            dw 2712,1,  0,1,    ; A4 E_stac
+   388 00000307 E40B0400                    dw 3044,4,          ; G4 Q_full
+   389 0000030B 00000800                    dw 0,8,             ; Rest H (8 ticks rest before bridge)
+   390                                  
+   391                                  
+   392                                      ; -- New Section 1: Descending Passage (full durations) --
+   393                                      ; C6 Q, D6 E, B5 E, A5 E, G5 H, R Q
+   394 0000030F 74040400                    dw 1140,4,          ; C6 Q (4 ticks)
+   395 00000313 F7030200                    dw 1015,2,          ; D6 E (2 ticks)
+   396 00000317 B8040200                    dw 1208,2,          ; B5 E (2 ticks)
+   397 0000031B 4C050200                    dw 1356,2,          ; A5 E (2 ticks)
+   398 0000031F F2050800                    dw 1522,8,          ; G5 H (8 ticks)
+   399 00000323 00000400                    dw 0,4,             ; R Q (4 ticks rest)
+   400                                  
+   401                                      ; F#5 Q, E5 E, D5 E, C5 E, B4 H, R Q
+   402 00000327 4C060400                    dw 1612,4,          ; F#5 Q
+   403 0000032B 12070200                    dw 1810,2,          ; E5 E
+   404 0000032F EE070200                    dw 2030,2,          ; D5 E
+   405 00000333 E8080200                    dw 2280,2,          ; C5 E
+   406 00000337 70090800                    dw 2416,8,          ; B4 H (lower B)
+   407 0000033B 00000400                    dw 0,4,             ; R Q
+   408                                  
+   409                                  
+   410                                      ; -- New Section 2: Arpeggio-like Floating (staccato & full) --
+   411                                      ; C5 E_stac, E5 E_stac, G5 Q, E5 E_stac, C5 E_stac, G5 Q, R Q (using R Q)
+   412 0000033F E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   413 00000347 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   414 0000034F F2050400                    dw 1522,4,          ; G5 Q
+   415 00000353 1207010000000100            dw 1810,1,  0,1,    ; E5 E_stac
+   416 0000035B E808010000000100            dw 2280,1,  0,1,    ; C5 E_stac
+   417 00000363 F2050400                    dw 1522,4,          ; G5 Q
+   418 00000367 00000400                    dw 0,4,             ; R Q
+   419                                  
+   420                                      ; F5 E_stac, A5 E_stac, C6 Q, A5 E_stac, F5 E_stac, C6 Q, R Q (using R Q)
+   421 0000036B A406010000000100            dw 1700,1,  0,1,    ; F5 E_stac
+   422 00000373 4C05010000000100            dw 1356,1,  0,1,    ; A5 E_stac
+   423 0000037B 74040400                    dw 1140,4,          ; C6 Q
+   424 0000037F 4C05010000000100            dw 1356,1,  0,1,    ; A5 E_stac
+   425 00000387 A406010000000100            dw 1700,1,  0,1,    ; F5 E_stac
+   426 0000038F 74040400                    dw 1140,4,          ; C6 Q
+   427 00000393 00000400                    dw 0,4,             ; R Q
+   428                                  
+   429                                      ; Final rise towards loop
+   430                                      ; G5 E_stac, B5 E_stac, D6 H, Rest DH
+   431 00000397 F205010000000100            dw 1522,1,  0,1,    ; G5 E_stac
+   432 0000039F B804010000000100            dw 1208,1,  0,1,    ; B5 E_stac
+   433 000003A7 F7030800                    dw 1015,8,          ; D6 H (8 ticks)
+   434 000003AB 00000C00                    dw 0,12,            ; Rest DH (12 ticks rest)
+   435                                  
+   436                                  music_data_end:
+   437 000003AF FFFF0000                    dw 0xFFFF, 0 ; End of song marker - indicates player should loop
+   438                                  
+   439                                  ; Variables used by music player and game loop
+   440 000003B3 [DF01]                  current_music_note_ptr: dw music_flappy_theme
+   441 000003B5 0000                    current_note_duration_counter: dw 0
+   442 000003B7 00                      is_music_playing_note: db 0
+   443 000003B8 0000                    game_timer: dw 0

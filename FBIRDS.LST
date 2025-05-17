@@ -1,0 +1,2644 @@
+     1                                  use16
+     2                                  org 0x100
+     3                                  
+     4 00000000 B80200                          mov ax,0x0002   ; Set 80x25 text mode
+     5 00000003 CD10                            int 0x10        ; Call BIOS
+     6 00000005 FC                              cld             ; Reset direction flag (so stosw increments registers)
+     7 00000006 B800B8                          mov ax,0xb800   ; Point to video segment
+     8 00000009 8ED8                            mov ds,ax       ; Both the source (common access)
+     9 0000000B 8EC0                            mov es,ax       ; and target segments
+    10 0000000D C706[A60F]0000                  mov word [high_score], 0 ; Initialize high score to 0 only once at program start
+    11                                  
+    12                                          ; Display menu
+    13                                          ;
+    14                                  menu:
+    15 00000013 E85C0E                          call clear_screen
+    16 00000016 C606AF0F01                      mov byte [extra_life_available], 1 ; Reset extra life when returning to main menu
+    17 0000001B C606B20F00                      mov byte [paused], 0    ; Initialize paused state to 0 (not paused)
+    18                                          ; --- START: Initialize Invincibility in Menu ---
+    19 00000020 C606B30F05                      mov byte [invincibility_uses_left], 5 ; Reset invincibility uses to 5
+    20 00000025 C606B40F00                      mov byte [invincibility_active], 0   ; Ensure invincibility is not active
+    21 0000002A C706B50F0000                    mov word [invincibility_timer], 0    ; Reset invincibility timer
+    22                                          ; --- END: Initialize Invincibility in Menu ---
+    23                                         
+    24                                  
+    25                                  
+    26                                          ; --- Draw cloud backgrounds with white background ---
+    27                                          ; First cloud moved 3 rows down (now at row 3-4)
+    28 00000030 E86701                          call draw_cloud_background_row3_col10
+    29                                          
+    30                                          ; Removed middle cloud (was at row 1-2, col 30)
+    31                                          
+    32                                          ; Third cloud moved 3 rows down (now at row 5-6)
+    33 00000033 E87B01                          call draw_cloud_background_row5_col50
+    34                                          
+    35                                          ; Fourth cloud moved 3 rows down (now at row 3-4)
+    36 00000036 E88F01                          call draw_cloud_background_row3_col60
+    37                                          
+    38                                          ; Additional small clouds
+    39 00000039 E8A301                          call draw_small_cloud_row7_col15
+    40 0000003C E8B701                          call draw_small_cloud_row2_col40
+    41 0000003F E8CB01                          call draw_small_cloud_row6_col70
+    42                                          
+    43                                          ; --- Display: GROUP 3 PRESENTS ---
+    44 00000042 BFBE02                          mov di, (4 * 80 + 31) * 2     ; Row 4, Column 31
+    45 00000045 B43F                            mov ah, 0x3f                  ; White on Cyan
+    46 00000047 B047                            mov al, 'G'                   ; "GROUP 3 PRESENTS:"
+    47 00000049 AB                              stosw
+    48 0000004A B052                            mov al, 'R'
+    49 0000004C AB                              stosw
+    50 0000004D B04F                            mov al, 'O'
+    51 0000004F AB                              stosw
+    52 00000050 B055                            mov al, 'U'
+    53 00000052 AB                              stosw
+    54 00000053 B050                            mov al, 'P'
+    55 00000055 AB                              stosw
+    56 00000056 B020                            mov al, ' '
+    57 00000058 AB                              stosw
+    58 00000059 B033                            mov al, '3'
+    59 0000005B AB                              stosw
+    60 0000005C B020                            mov al, ' '
+    61 0000005E AB                              stosw
+    62 0000005F B050                            mov al, 'P'
+    63 00000061 AB                              stosw
+    64 00000062 B052                            mov al, 'R'
+    65 00000064 AB                              stosw
+    66 00000065 B045                            mov al, 'E'
+    67 00000067 AB                              stosw
+    68 00000068 B053                            mov al, 'S'
+    69 0000006A AB                              stosw
+    70 0000006B B045                            mov al, 'E'
+    71 0000006D AB                              stosw
+    72 0000006E B04E                            mov al, 'N'
+    73 00000070 AB                              stosw
+    74 00000071 B054                            mov al, 'T'
+    75 00000073 AB                              stosw
+    76 00000074 B053                            mov al, 'S'
+    77 00000076 AB                              stosw
+    78 00000077 B03A                            mov al, ':'
+    79 00000079 AB                              stosw
+    80                                          
+    81                                          ; --- HARIBIRD ---
+    82 0000007A BF6603                          mov di, (5 * 80 + 35) * 2     ; Row 5, Column 35
+    83 0000007D B43F                            mov ah, 0x3f
+    84 0000007F B048                            mov al, 'H'
+    85 00000081 AB                              stosw
+    86 00000082 B041                            mov al, 'A'
+    87 00000084 AB                              stosw
+    88 00000085 B052                            mov al, 'R'
+    89 00000087 AB                              stosw
+    90 00000088 B049                            mov al, 'I'
+    91 0000008A AB                              stosw
+    92 0000008B B042                            mov al, 'B'
+    93 0000008D AB                              stosw
+    94 0000008E B049                            mov al, 'I'
+    95 00000090 AB                              stosw
+    96 00000091 B052                            mov al, 'R'
+    97 00000093 AB                              stosw
+    98 00000094 B044                            mov al, 'D'
+    99 00000096 AB                              stosw
+   100 00000097 B053                            mov al, 'S'
+   101 00000099 AB                              stosw
+   102                                          
+   103                                          
+   104 0000009A BF0604                          mov di, (6 * 80 + 35) * 2     ; Row 6, Column 35
+   105 0000009D B43F                            mov ah, 0x3f
+   106 0000009F B054                            mov al, 'T'
+   107 000000A1 AB                              stosw
+   108 000000A2 B049                            mov al, 'I'
+   109 000000A4 AB                              stosw
+   110 000000A5 B04E                            mov al, 'N'
+   111 000000A7 AB                              stosw
+   112 000000A8 B059                            mov al, 'Y'
+   113 000000AA AB                              stosw
+   114 000000AB B020                            mov al, ' '
+   115 000000AD AB                              stosw
+   116 000000AE B057                            mov al, 'W'
+   117 000000B0 AB                              stosw
+   118 000000B1 B049                            mov al, 'I'
+   119 000000B3 AB                              stosw
+   120 000000B4 B04E                            mov al, 'N'
+   121 000000B6 AB                              stosw
+   122 000000B7 B047                            mov al, 'G'
+   123 000000B9 AB                              stosw
+   124                                  
+   125 000000BA BFA804                          mov di, (7 * 80 + 36) * 2     ; Row 7, Column 36
+   126 000000BD B43F                            mov ah, 0x3f
+   127 000000BF B045                            mov al, 'E'
+   128 000000C1 AB                              stosw
+   129 000000C2 B053                            mov al, 'S'
+   130 000000C4 AB                              stosw
+   131 000000C5 B043                            mov al, 'C'
+   132 000000C7 AB                              stosw
+   133 000000C8 B041                            mov al, 'A'
+   134 000000CA AB                              stosw
+   135 000000CB B050                            mov al, 'P'
+   136 000000CD AB                              stosw
+   137 000000CE B045                            mov al, 'E'
+   138 000000D0 AB                              stosw
+   139                                  
+   140                                          ; --- ENTER YOUR CHOICE: ---
+   141 000000D1 BFDE05                          mov di, (9 * 80 + 31) * 2     ; Row 9, Column 31
+   142 000000D4 B43F                            mov ah, 0x3f                  ; White on Cyan
+   143 000000D6 B045                            mov al, 'E'
+   144 000000D8 AB                              stosw
+   145 000000D9 B04E                            mov al, 'N'
+   146 000000DB AB                              stosw
+   147 000000DC B054                            mov al, 'T'
+   148 000000DE AB                              stosw
+   149 000000DF B045                            mov al, 'E'
+   150 000000E1 AB                              stosw
+   151 000000E2 B052                            mov al, 'R'
+   152 000000E4 AB                              stosw
+   153 000000E5 B020                            mov al, ' '
+   154 000000E7 AB                              stosw
+   155 000000E8 B059                            mov al, 'Y'
+   156 000000EA AB                              stosw
+   157 000000EB B04F                            mov al, 'O'
+   158 000000ED AB                              stosw
+   159 000000EE B055                            mov al, 'U'
+   160 000000F0 AB                              stosw
+   161 000000F1 B052                            mov al, 'R'
+   162 000000F3 AB                              stosw
+   163 000000F4 B020                            mov al, ' '
+   164 000000F6 AB                              stosw
+   165 000000F7 B043                            mov al, 'C'
+   166 000000F9 AB                              stosw
+   167 000000FA B048                            mov al, 'H'
+   168 000000FC AB                              stosw
+   169 000000FD B04F                            mov al, 'O'
+   170 000000FF AB                              stosw
+   171 00000100 B049                            mov al, 'I'
+   172 00000102 AB                              stosw
+   173 00000103 B043                            mov al, 'C'
+   174 00000105 AB                              stosw
+   175 00000106 B045                            mov al, 'E'
+   176 00000108 AB                              stosw
+   177 00000109 B03A                            mov al, ':'
+   178 0000010B AB                              stosw
+   179 0000010C B020                            mov al, ' '
+   180 0000010E AB                              stosw
+   181 0000010F 81C70200                        add di, 2                    
+   182                                          ; Move cursor after ": "
+   183                                          
+   184                                          ; --- 1) EASY ---
+   185 00000113 BF8806                          mov di, (10 * 80 + 36) * 2     ; Row 10, Column 36
+   186 00000116 B43F                            mov ah, 0x3f
+   187 00000118 B031                            mov al, '1'
+   188 0000011A AB                              stosw
+   189 0000011B B029                            mov al, ')'
+   190 0000011D AB                              stosw
+   191 0000011E B020                            mov al, ' '
+   192 00000120 AB                              stosw
+   193 00000121 B045                            mov al, 'E'
+   194 00000123 AB                              stosw
+   195 00000124 B041                            mov al, 'A'
+   196 00000126 AB                              stosw
+   197 00000127 B053                            mov al, 'S'
+   198 00000129 AB                              stosw
+   199 0000012A B059                            mov al, 'Y'
+   200 0000012C AB                              stosw
+   201                                          
+   202                                          ; --- 2) MEDIUM ---
+   203 0000012D BF2607                          mov di, (11 * 80 + 35) * 2    ; Row 11, Column 35
+   204 00000130 B43F                            mov ah, 0x3f
+   205 00000132 B032                            mov al, '2'
+   206 00000134 AB                              stosw
+   207 00000135 B029                            mov al, ')'
+   208 00000137 AB                              stosw
+   209 00000138 B020                            mov al, ' '
+   210 0000013A AB                              stosw
+   211 0000013B B04D                            mov al, 'M'
+   212 0000013D AB                              stosw
+   213 0000013E B045                            mov al, 'E'
+   214 00000140 AB                              stosw
+   215 00000141 B044                            mov al, 'D'
+   216 00000143 AB                              stosw
+   217 00000144 B049                            mov al, 'I'
+   218 00000146 AB                              stosw
+   219 00000147 B055                            mov al, 'U'
+   220 00000149 AB                              stosw
+   221 0000014A B04D                            mov al, 'M'
+   222 0000014C AB                              stosw
+   223                                          
+   224                                          ; --- 3) HARD ---
+   225 0000014D BFC807                          mov di, (12 * 80 + 36) * 2    ; Row 12, Column 36
+   226 00000150 B43F                            mov ah, 0x3f
+   227 00000152 B033                            mov al, '3'
+   228 00000154 AB                              stosw
+   229 00000155 B029                            mov al, ')'
+   230 00000157 AB                              stosw
+   231 00000158 B020                            mov al, ' '
+   232 0000015A AB                              stosw
+   233 0000015B B048                            mov al, 'H'
+   234 0000015D AB                              stosw
+   235 0000015E B041                            mov al, 'A'
+   236 00000160 AB                              stosw
+   237 00000161 B052                            mov al, 'R'
+   238 00000163 AB                              stosw
+   239 00000164 B044                            mov al, 'D'
+   240 00000166 AB                              stosw
+   241                                  
+   242                                          ; --- 4) HOW TO PLAY ---
+   243 00000167 BF6208                          mov di, (13 * 80 + 33) * 2    ; Row 13, Column 33
+   244 0000016A B43F                            mov ah, 0x3f
+   245 0000016C B034                            mov al, '4'
+   246 0000016E AB                              stosw
+   247 0000016F B029                            mov al, ')'
+   248 00000171 AB                              stosw
+   249 00000172 B020                            mov al, ' '
+   250 00000174 AB                              stosw
+   251 00000175 B048                            mov al, 'H'
+   252 00000177 AB                              stosw
+   253 00000178 B04F                            mov al, 'O'
+   254 0000017A AB                              stosw
+   255 0000017B B057                            mov al, 'W'
+   256 0000017D AB                              stosw
+   257 0000017E B020                            mov al, ' '
+   258 00000180 AB                              stosw
+   259 00000181 B054                            mov al, 'T'
+   260 00000183 AB                              stosw
+   261 00000184 B04F                            mov al, 'O'
+   262 00000186 AB                              stosw
+   263 00000187 B020                            mov al, ' '
+   264 00000189 AB                              stosw
+   265 0000018A B050                            mov al, 'P'
+   266 0000018C AB                              stosw
+   267 0000018D B04C                            mov al, 'L'
+   268 0000018F AB                              stosw
+   269 00000190 B041                            mov al, 'A'
+   270 00000192 AB                              stosw
+   271 00000193 B059                            mov al, 'Y'
+   272 00000195 AB                              stosw
+   273                                  
+   274                                          ; Wait for menu selection
+   275 00000196 E88B00                          call read_input ;call read input
+   276 00000199 C3                              ret
+   277                                  
+   278                                  ; Updated cloud drawing procedures (moved 3 rows down)
+   279                                  draw_cloud_background_row3_col10:
+   280                                          ; Draw cloud shape at row 3, column 10 (was row 0)
+   281 0000019A BFF401                          mov di, (3 * 80 + 10) * 2     ; Start position
+   282 0000019D B90C00                          mov cx, 12                    ; Cloud width
+   283 000001A0 B4F0                            mov ah, 0xF0                  ; White background, black foreground
+   284 000001A2 B020                            mov al, ' '                   ; Space character
+   285                                      .loop_row0:
+   286 000001A4 AB                              stosw
+   287 000001A5 E2FD                            loop .loop_row0
+   288                                          
+   289                                          ; Second row of the cloud (slightly wider)
+   290 000001A7 BF9002                          mov di, (4 * 80 + 8) * 2      ; Row 4, Column 8 (was row 1)
+   291 000001AA B90F00                          mov cx, 15                    ; Cloud width
+   292                                      .loop_row1:
+   293 000001AD AB                              stosw
+   294 000001AE E2FD                            loop .loop_row1
+   295 000001B0 C3                              ret
+   296                                  
+   297                                  ; Removed draw_cloud_background_row1_col30 (middle cloud)
+   298                                  
+   299                                  draw_cloud_background_row5_col50:
+   300                                          ; Draw cloud shape at row 5, column 50 (was row 2)
+   301 000001B1 BF8403                          mov di, (5 * 80 + 50) * 2     ; Start position
+   302 000001B4 B90A00                          mov cx, 10                    ; Cloud width
+   303 000001B7 B4F0                            mov ah, 0xF0                  ; White background, black foreground
+   304 000001B9 B020                            mov al, ' '                   ; Space character
+   305                                      .loop_row0:
+   306 000001BB AB                              stosw
+   307 000001BC E2FD                            loop .loop_row0
+   308                                          
+   309                                          ; Second row of the cloud (slightly wider)
+   310 000001BE BF2004                          mov di, (6 * 80 + 48) * 2     ; Row 6, Column 48 (was row 3)
+   311 000001C1 B90E00                          mov cx, 14                    ; Cloud width
+   312                                      .loop_row1:
+   313 000001C4 AB                              stosw
+   314 000001C5 E2FD                            loop .loop_row1
+   315 000001C7 C3                              ret
+   316                                  
+   317                                  draw_cloud_background_row3_col60:
+   318                                          ; Draw cloud shape at row 3, column 60 (was row 0)
+   319 000001C8 BF5802                          mov di, (3 * 80 + 60) * 2     ; Start position
+   320 000001CB B90F00                          mov cx, 15                    ; Cloud width
+   321 000001CE B4F0                            mov ah, 0xF0                  ; White background, black foreground
+   322 000001D0 B020                            mov al, ' '                   ; Space character
+   323                                      .loop_row0:
+   324 000001D2 AB                              stosw
+   325 000001D3 E2FD                            loop .loop_row0
+   326                                          
+   327                                          ; Second row of the cloud (slightly wider)
+   328 000001D5 BFF402                          mov di, (4 * 80 + 58) * 2     ; Row 4, Column 58 (was row 1)
+   329 000001D8 B91300                          mov cx, 19                    ; Cloud width
+   330                                      .loop_row1:
+   331 000001DB AB                              stosw
+   332 000001DC E2FD                            loop .loop_row1
+   333 000001DE C3                              ret
+   334                                  
+   335                                  ; New small cloud procedures
+   336                                  draw_small_cloud_row7_col15:
+   337                                          ; Draw small cloud at row 7, column 15
+   338 000001DF BF7E04                          mov di, (7 * 80 + 15) * 2     ; Start position
+   339 000001E2 B90600                          mov cx, 6                     ; Small cloud width
+   340 000001E5 B4F0                            mov ah, 0xF0                  ; White background, black foreground
+   341 000001E7 B020                            mov al, ' '                   ; Space character
+   342                                      .loop_row0:
+   343 000001E9 AB                              stosw
+   344 000001EA E2FD                            loop .loop_row0
+   345                                          
+   346                                          ; Second row of the small cloud
+   347 000001EC BF1C05                          mov di, (8 * 80 + 14) * 2     ; Row 8, Column 14
+   348 000001EF B90800                          mov cx, 8                     ; Slightly wider
+   349                                      .loop_row1:
+   350 000001F2 AB                              stosw
+   351 000001F3 E2FD                            loop .loop_row1
+   352 000001F5 C3                              ret
+   353                                  
+   354                                  draw_small_cloud_row2_col40:
+   355                                          ; Draw small cloud at row 2, column 40
+   356 000001F6 BF9001                          mov di, (2 * 80 + 40) * 2     ; Start position
+   357 000001F9 B90500                          mov cx, 5                     ; Small cloud width
+   358 000001FC B4F0                            mov ah, 0xF0                  ; White background, black foreground
+   359 000001FE B020                            mov al, ' '                   ; Space character
+   360                                      .loop_row0:
+   361 00000200 AB                              stosw
+   362 00000201 E2FD                            loop .loop_row0
+   363                                          
+   364                                          ; Second row of the small cloud
+   365 00000203 BF2E02                          mov di, (3 * 80 + 39) * 2     ; Row 3, Column 39
+   366 00000206 B90700                          mov cx, 7                     ; Slightly wider
+   367                                      .loop_row1:
+   368 00000209 AB                              stosw
+   369 0000020A E2FD                            loop .loop_row1
+   370 0000020C C3                              ret
+   371                                  
+   372                                  draw_small_cloud_row6_col70:
+   373                                          ; Draw small cloud at row 6, column 70
+   374 0000020D BF4C04                          mov di, (6 * 80 + 70) * 2     ; Start position
+   375 00000210 B90700                          mov cx, 7                     ; Small cloud width
+   376 00000213 B4F0                            mov ah, 0xF0                  ; White background, black foreground
+   377 00000215 B020                            mov al, ' '                   ; Space character
+   378                                      .loop_row0:
+   379 00000217 AB                              stosw
+   380 00000218 E2FD                            loop .loop_row0
+   381                                          
+   382                                          ; Second row of the small cloud
+   383 0000021A BFEA04                          mov di, (7 * 80 + 69) * 2     ; Row 7, Column 69
+   384 0000021D B90900                          mov cx, 9                     ; Slightly wider
+   385                                      .loop_row1:
+   386 00000220 AB                              stosw
+   387 00000221 E2FD                            loop .loop_row1
+   388 00000223 C3                              ret
+   389                                  read_input:
+   390 00000224 B400                            mov ah, 00h     ; Function 0 of int 16h: read keyboard input
+   391 00000226 CD16                            int 0x16        ; BIOS interrupt call
+   392 00000228 3C1B                    	cmp al, 0x1b    ; Is the pressed key Escape (ASCII 0x1b)?
+   393 0000022A 0F847A0D                        je near exit_to_dos  ; If yes, jump to our common exit label
+   394 0000022E 3C31                            cmp al, '1'     ; Check if the key pressed is '1'
+   395 00000230 740E                            je easy
+   396 00000232 3C32                            cmp al, '2'     ; Check if the key pressed is '2'
+   397 00000234 7412                            je medium
+   398 00000236 3C33                            cmp al, '3'     ; Check if the key pressed is '3'
+   399 00000238 7416                            je hard
+   400 0000023A 3C34                            cmp al, '4'     ; Check if the key pressed is '5'
+   401 0000023C 741A                            je how_to_play  ; Jump to how_to_play instructions
+   402 0000023E EBE4                            jmp read_input  ; Invalid key, ask again
+   403                                  
+   404                                  easy:
+   405 00000240 C606AE0F01                      mov byte [user_choice], 1
+   406 00000245 E93604                          jmp fb21
+   407                                  
+   408                                  medium:
+   409 00000248 C606AE0F02                      mov byte [user_choice], 2
+   410 0000024D E92E04                          jmp fb21
+   411                                  
+   412                                  hard:
+   413 00000250 C606AE0F03                      mov byte [user_choice], 3
+   414 00000255 E92604                          jmp fb21
+   415                                  
+   416                                  how_to_play:
+   417 00000258 E8170C                          call clear_screen
+   418                                  
+   419                                          ; --- Title: "HOW TO PLAY HARIBIRD" ---
+   420                                          ; Length: 19. Target Row: 3 (0-indexed: 2)
+   421                                          ; Start Column: (80 - 19) / 2 = 30
+   422 0000025B BF7C01                          mov di, (2 * 80 + 30) * 2     ; DI for Row 2, Col 30
+   423 0000025E B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   424 00000260 B048                            mov al, 'H'
+   425 00000262 AB                              stosw
+   426 00000263 B04F                            mov al, 'O'
+   427 00000265 AB                              stosw
+   428 00000266 B057                            mov al, 'W'
+   429 00000268 AB                              stosw
+   430 00000269 B020                            mov al, ' '
+   431 0000026B AB                              stosw
+   432 0000026C B054                            mov al, 'T'
+   433 0000026E AB                              stosw
+   434 0000026F B04F                            mov al, 'O'
+   435 00000271 AB                              stosw
+   436 00000272 B020                            mov al, ' '
+   437 00000274 AB                              stosw
+   438 00000275 B050                            mov al, 'P'
+   439 00000277 AB                              stosw
+   440 00000278 B04C                            mov al, 'L'
+   441 0000027A AB                              stosw
+   442 0000027B B041                            mov al, 'A'
+   443 0000027D AB                              stosw
+   444 0000027E B059                            mov al, 'Y'
+   445 00000280 AB                              stosw
+   446 00000281 B020                            mov al, ' '
+   447 00000283 AB                              stosw
+   448 00000284 B048                            mov al, 'H'
+   449 00000286 AB                              stosw
+   450 00000287 B041                            mov al, 'A'
+   451 00000289 AB                              stosw
+   452 0000028A B052                            mov al, 'R'
+   453 0000028C AB                              stosw
+   454 0000028D B049                            mov al, 'I'
+   455 0000028F AB                              stosw
+   456 00000290 B042                            mov al, 'B'
+   457 00000292 AB                              stosw
+   458 00000293 B049                            mov al, 'I'
+   459 00000295 AB                              stosw
+   460 00000296 B052                            mov al, 'R'
+   461 00000298 AB                              stosw
+   462 00000299 B044                            mov al, 'D'
+   463 0000029B AB                              stosw
+   464                                          
+   465                                          ; --- Line 1: " Press any key to fly upward" ---
+   466                                          ; Target Row: 5 (0-indexed: 4), Col 17
+   467 0000029C BFA202                          mov di, (4 * 80 + 17) * 2
+   468 0000029F B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   469 000002A1 B020                            mov al, ' '                   ; Leading space for alignment
+   470 000002A3 AB                              stosw
+   471 000002A4 B050                            mov al, 'P'
+   472 000002A6 AB                              stosw
+   473 000002A7 B072                            mov al, 'r'
+   474 000002A9 AB                              stosw
+   475 000002AA B065                            mov al, 'e'
+   476 000002AC AB                              stosw
+   477 000002AD B073                            mov al, 's'
+   478 000002AF AB                              stosw
+   479 000002B0 B073                            mov al, 's'
+   480 000002B2 AB                              stosw
+   481 000002B3 B020                            mov al, ' '
+   482 000002B5 AB                              stosw
+   483 000002B6 B061                            mov al, 'a'
+   484 000002B8 AB                              stosw
+   485 000002B9 B06E                            mov al, 'n'
+   486 000002BB AB                              stosw
+   487 000002BC B079                            mov al, 'y'
+   488 000002BE AB                              stosw
+   489 000002BF B020                            mov al, ' '
+   490 000002C1 AB                              stosw
+   491 000002C2 B06B                            mov al, 'k'
+   492 000002C4 AB                              stosw
+   493 000002C5 B065                            mov al, 'e'
+   494 000002C7 AB                              stosw
+   495 000002C8 B079                            mov al, 'y'
+   496 000002CA AB                              stosw
+   497 000002CB B020                            mov al, ' '
+   498 000002CD AB                              stosw
+   499 000002CE B074                            mov al, 't'
+   500 000002D0 AB                              stosw
+   501 000002D1 B06F                            mov al, 'o'
+   502 000002D3 AB                              stosw
+   503 000002D4 B020                            mov al, ' '
+   504 000002D6 AB                              stosw
+   505 000002D7 B066                            mov al, 'f'
+   506 000002D9 AB                              stosw
+   507 000002DA B06C                            mov al, 'l'
+   508 000002DC AB                              stosw
+   509 000002DD B079                            mov al, 'y'
+   510 000002DF AB                              stosw
+   511 000002E0 B020                            mov al, ' '
+   512 000002E2 AB                              stosw
+   513 000002E3 B075                            mov al, 'u'
+   514 000002E5 AB                              stosw
+   515 000002E6 B070                            mov al, 'p'
+   516 000002E8 AB                              stosw
+   517 000002E9 B077                            mov al, 'w'
+   518 000002EB AB                              stosw
+   519 000002EC B061                            mov al, 'a'
+   520 000002EE AB                              stosw
+   521 000002EF B072                            mov al, 'r'
+   522 000002F1 AB                              stosw
+   523 000002F2 B064                            mov al, 'd'
+   524 000002F4 AB                              stosw
+   525                                          
+   526                                          ; --- Line 2: " Avoid the pipes as you fly" ---
+   527                                          ; Target Row: 6 (0-indexed: 5), Col 17
+   528 000002F5 BF4203                          mov di, (5 * 80 + 17) * 2
+   529 000002F8 B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   530 000002FA B020                            mov al, ' '                   ; Leading space for alignment
+   531 000002FC AB                              stosw
+   532 000002FD B041                            mov al, 'A'
+   533 000002FF AB                              stosw
+   534 00000300 B076                            mov al, 'v'
+   535 00000302 AB                              stosw
+   536 00000303 B06F                            mov al, 'o'
+   537 00000305 AB                              stosw
+   538 00000306 B069                            mov al, 'i'
+   539 00000308 AB                              stosw
+   540 00000309 B064                            mov al, 'd'
+   541 0000030B AB                              stosw
+   542 0000030C B020                            mov al, ' '
+   543 0000030E AB                              stosw
+   544 0000030F B074                            mov al, 't'
+   545 00000311 AB                              stosw
+   546 00000312 B068                            mov al, 'h'
+   547 00000314 AB                              stosw
+   548 00000315 B065                            mov al, 'e'
+   549 00000317 AB                              stosw
+   550 00000318 B020                            mov al, ' '
+   551 0000031A AB                              stosw
+   552 0000031B B070                            mov al, 'p'
+   553 0000031D AB                              stosw
+   554 0000031E B069                            mov al, 'i'
+   555 00000320 AB                              stosw
+   556 00000321 B070                            mov al, 'p'
+   557 00000323 AB                              stosw
+   558 00000324 B065                            mov al, 'e'
+   559 00000326 AB                              stosw
+   560 00000327 B073                            mov al, 's'
+   561 00000329 AB                              stosw
+   562 0000032A B020                            mov al, ' '
+   563 0000032C AB                              stosw
+   564 0000032D B061                            mov al, 'a'
+   565 0000032F AB                              stosw
+   566 00000330 B073                            mov al, 's'
+   567 00000332 AB                              stosw
+   568 00000333 B020                            mov al, ' '
+   569 00000335 AB                              stosw
+   570 00000336 B079                            mov al, 'y'
+   571 00000338 AB                              stosw
+   572 00000339 B06F                            mov al, 'o'
+   573 0000033B AB                              stosw
+   574 0000033C B075                            mov al, 'u'
+   575 0000033E AB                              stosw
+   576 0000033F B020                            mov al, ' '
+   577 00000341 AB                              stosw
+   578 00000342 B066                            mov al, 'f'
+   579 00000344 AB                              stosw
+   580 00000345 B06C                            mov al, 'l'
+   581 00000347 AB                              stosw
+   582 00000348 B079                            mov al, 'y'
+   583 0000034A AB                              stosw
+   584                                          
+   585                                          ; --- Line 3: " Press 'P' to pause the game" ---
+   586                                          ; Target Row: 7 (0-indexed: 6), Col 17
+   587 0000034B BFE203                          mov di, (6 * 80 + 17) * 2
+   588 0000034E B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   589 00000350 B020                            mov al, ' '                   ; Leading space for alignment
+   590 00000352 AB                              stosw
+   591 00000353 B050                            mov al, 'P'
+   592 00000355 AB                              stosw
+   593 00000356 B072                            mov al, 'r'
+   594 00000358 AB                              stosw
+   595 00000359 B065                            mov al, 'e'
+   596 0000035B AB                              stosw
+   597 0000035C B073                            mov al, 's'
+   598 0000035E AB                              stosw
+   599 0000035F B073                            mov al, 's'
+   600 00000361 AB                              stosw
+   601 00000362 B020                            mov al, ' '
+   602 00000364 AB                              stosw
+   603 00000365 B027                            mov al, 0x27                  ; '''
+   604 00000367 AB                              stosw
+   605 00000368 B050                            mov al, 'P'
+   606 0000036A AB                              stosw
+   607 0000036B B027                            mov al, 0x27                  ; '''
+   608 0000036D AB                              stosw
+   609 0000036E B020                            mov al, ' '
+   610 00000370 AB                              stosw
+   611 00000371 B074                            mov al, 't'
+   612 00000373 AB                              stosw
+   613 00000374 B06F                            mov al, 'o'
+   614 00000376 AB                              stosw
+   615 00000377 B020                            mov al, ' '
+   616 00000379 AB                              stosw
+   617 0000037A B070                            mov al, 'p'
+   618 0000037C AB                              stosw
+   619 0000037D B061                            mov al, 'a'
+   620 0000037F AB                              stosw
+   621 00000380 B075                            mov al, 'u'
+   622 00000382 AB                              stosw
+   623 00000383 B073                            mov al, 's'
+   624 00000385 AB                              stosw
+   625 00000386 B065                            mov al, 'e'
+   626 00000388 AB                              stosw
+   627 00000389 B020                            mov al, ' '
+   628 0000038B AB                              stosw
+   629 0000038C B074                            mov al, 't'
+   630 0000038E AB                              stosw
+   631 0000038F B068                            mov al, 'h'
+   632 00000391 AB                              stosw
+   633 00000392 B065                            mov al, 'e'
+   634 00000394 AB                              stosw
+   635 00000395 B020                            mov al, ' '
+   636 00000397 AB                              stosw
+   637 00000398 B067                            mov al, 'g'
+   638 0000039A AB                              stosw
+   639 0000039B B061                            mov al, 'a'
+   640 0000039D AB                              stosw
+   641 0000039E B06D                            mov al, 'm'
+   642 000003A0 AB                              stosw
+   643 000003A1 B065                            mov al, 'e'
+   644 000003A3 AB                              stosw
+   645                                          
+   646                                          ; --- Line 4: " Press 'ESC' to exit the game" ---
+   647                                          ; Target Row: 8 (0-indexed: 7), Col 17
+   648 000003A4 BF8204                          mov di, (7 * 80 + 17) * 2
+   649 000003A7 B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   650 000003A9 B020                            mov al, ' '                   ; Leading space for alignment
+   651 000003AB AB                              stosw
+   652 000003AC B050                            mov al, 'P'
+   653 000003AE AB                              stosw
+   654 000003AF B072                            mov al, 'r'
+   655 000003B1 AB                              stosw
+   656 000003B2 B065                            mov al, 'e'
+   657 000003B4 AB                              stosw
+   658 000003B5 B073                            mov al, 's'
+   659 000003B7 AB                              stosw
+   660 000003B8 B073                            mov al, 's'
+   661 000003BA AB                              stosw
+   662 000003BB B020                            mov al, ' '
+   663 000003BD AB                              stosw
+   664 000003BE B027                            mov al, 0x27                  ; '''
+   665 000003C0 AB                              stosw
+   666 000003C1 B045                            mov al, 'E'
+   667 000003C3 AB                              stosw
+   668 000003C4 B053                            mov al, 'S'
+   669 000003C6 AB                              stosw
+   670 000003C7 B043                            mov al, 'C'
+   671 000003C9 AB                              stosw
+   672 000003CA B027                            mov al, 0x27                  ; '''
+   673 000003CC AB                              stosw
+   674 000003CD B020                            mov al, ' '
+   675 000003CF AB                              stosw
+   676 000003D0 B074                            mov al, 't'
+   677 000003D2 AB                              stosw
+   678 000003D3 B06F                            mov al, 'o'
+   679 000003D5 AB                              stosw
+   680 000003D6 B020                            mov al, ' '
+   681 000003D8 AB                              stosw
+   682 000003D9 B065                            mov al, 'e'
+   683 000003DB AB                              stosw
+   684 000003DC B078                            mov al, 'x'
+   685 000003DE AB                              stosw
+   686 000003DF B069                            mov al, 'i'
+   687 000003E1 AB                              stosw
+   688 000003E2 B074                            mov al, 't'
+   689 000003E4 AB                              stosw
+   690 000003E5 B020                            mov al, ' '
+   691 000003E7 AB                              stosw
+   692 000003E8 B074                            mov al, 't'
+   693 000003EA AB                              stosw
+   694 000003EB B068                            mov al, 'h'
+   695 000003ED AB                              stosw
+   696 000003EE B065                            mov al, 'e'
+   697 000003F0 AB                              stosw
+   698 000003F1 B020                            mov al, ' '
+   699 000003F3 AB                              stosw
+   700 000003F4 B067                            mov al, 'g'
+   701 000003F6 AB                              stosw
+   702 000003F7 B061                            mov al, 'a'
+   703 000003F9 AB                              stosw
+   704 000003FA B06D                            mov al, 'm'
+   705 000003FC AB                              stosw
+   706 000003FD B065                            mov al, 'e'
+   707 000003FF AB                              stosw
+   708                                  
+   709                                          ; --- Line 5: " Press 'I' to Activate Invincibility (5 uses)" ---
+   710                                          ; Target Row: 9 (0-indexed: 8), Col 17
+   711 00000400 BF2205                          mov di, (8 * 80 + 17) * 2
+   712 00000403 B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   713 00000405 B020                            mov al, ' '                   ; Leading space for alignment
+   714 00000407 AB                              stosw
+   715 00000408 B050                            mov al, 'P' ; Press
+   716 0000040A AB                              stosw
+   717 0000040B B072                            mov al, 'r'
+   718 0000040D AB                              stosw
+   719 0000040E B065                            mov al, 'e'
+   720 00000410 AB                              stosw
+   721 00000411 B073                            mov al, 's'
+   722 00000413 AB                              stosw
+   723 00000414 B073                            mov al, 's'
+   724 00000416 AB                              stosw
+   725 00000417 B020                            mov al, ' '
+   726 00000419 AB                              stosw
+   727 0000041A B027                            mov al, 0x27 ; '
+   728 0000041C AB                              stosw
+   729 0000041D B049                            mov al, 'I'  ; I
+   730 0000041F AB                              stosw
+   731 00000420 B027                            mov al, 0x27 ; '
+   732 00000422 AB                              stosw
+   733 00000423 B020                            mov al, ' '
+   734 00000425 AB                              stosw
+   735 00000426 B074                            mov al, 't' ; to
+   736 00000428 AB                              stosw
+   737 00000429 B06F                            mov al, 'o'
+   738 0000042B AB                              stosw
+   739 0000042C B020                            mov al, ' '
+   740 0000042E AB                              stosw
+   741 0000042F B041                            mov al, 'A' ; Activate Invincibility (5 uses)
+   742 00000431 AB                              stosw
+   743 00000432 B063                            mov al, 'c'
+   744 00000434 AB                              stosw
+   745 00000435 B074                            mov al, 't'
+   746 00000437 AB                              stosw
+   747 00000438 B069                            mov al, 'i'
+   748 0000043A AB                              stosw
+   749 0000043B B076                            mov al, 'v'
+   750 0000043D AB                              stosw
+   751 0000043E B061                            mov al, 'a'
+   752 00000440 AB                              stosw
+   753 00000441 B074                            mov al, 't'
+   754 00000443 AB                              stosw
+   755 00000444 B065                            mov al, 'e'
+   756 00000446 AB                              stosw
+   757 00000447 B020                            mov al, ' '
+   758 00000449 AB                              stosw
+   759 0000044A B049                            mov al, 'I'
+   760 0000044C AB                              stosw
+   761 0000044D B06E                            mov al, 'n'
+   762 0000044F AB                              stosw
+   763 00000450 B076                            mov al, 'v'
+   764 00000452 AB                              stosw
+   765 00000453 B069                            mov al, 'i'
+   766 00000455 AB                              stosw
+   767 00000456 B06E                            mov al, 'n'
+   768 00000458 AB                              stosw
+   769 00000459 B063                            mov al, 'c'
+   770 0000045B AB                              stosw
+   771 0000045C B069                            mov al, 'i'
+   772 0000045E AB                              stosw
+   773 0000045F B062                            mov al, 'b'
+   774 00000461 AB                              stosw
+   775 00000462 B069                            mov al, 'i'
+   776 00000464 AB                              stosw
+   777 00000465 B06C                            mov al, 'l'
+   778 00000467 AB                              stosw
+   779 00000468 B069                            mov al, 'i'
+   780 0000046A AB                              stosw
+   781 0000046B B074                            mov al, 't'
+   782 0000046D AB                              stosw
+   783 0000046E B079                            mov al, 'y'
+   784 00000470 AB                              stosw
+   785 00000471 B020                            mov al, ' '
+   786 00000473 AB                              stosw
+   787 00000474 B028                            mov al, '('
+   788 00000476 AB                              stosw
+   789 00000477 B035                            mov al, '5'
+   790 00000479 AB                              stosw
+   791 0000047A B020                            mov al, ' '
+   792 0000047C AB                              stosw
+   793 0000047D B075                            mov al, 'u'
+   794 0000047F AB                              stosw
+   795 00000480 B073                            mov al, 's'
+   796 00000482 AB                              stosw
+   797 00000483 B065                            mov al, 'e'
+   798 00000485 AB                              stosw
+   799 00000486 B073                            mov al, 's'
+   800 00000488 AB                              stosw
+   801 00000489 B029                            mov al, ')'
+   802 0000048B AB                              stosw
+   803                                  
+   804                                          ; --- Line 6: " Press 'R' to Resume the game after pausing" ---
+   805                                          ; Target Row: 10 (0-indexed: 9), Col 17
+   806 0000048C BFC205                          mov di, (9 * 80 + 17) * 2
+   807 0000048F B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   808 00000491 B020                            mov al, ' '                   ; Leading space for alignment
+   809 00000493 AB                              stosw
+   810 00000494 B050                            mov al, 'P' ; Press
+   811 00000496 AB                              stosw
+   812 00000497 B072                            mov al, 'r'
+   813 00000499 AB                              stosw
+   814 0000049A B065                            mov al, 'e'
+   815 0000049C AB                              stosw
+   816 0000049D B073                            mov al, 's'
+   817 0000049F AB                              stosw
+   818 000004A0 B073                            mov al, 's'
+   819 000004A2 AB                              stosw
+   820 000004A3 B020                            mov al, ' '
+   821 000004A5 AB                              stosw
+   822 000004A6 B027                            mov al, 0x27 ; '
+   823 000004A8 AB                              stosw
+   824 000004A9 B052                            mov al, 'R'  ; R
+   825 000004AB AB                              stosw
+   826 000004AC B027                            mov al, 0x27 ; '
+   827 000004AE AB                              stosw
+   828 000004AF B020                            mov al, ' '
+   829 000004B1 AB                              stosw
+   830 000004B2 B074                            mov al, 't' ; to
+   831 000004B4 AB                              stosw
+   832 000004B5 B06F                            mov al, 'o'
+   833 000004B7 AB                              stosw
+   834 000004B8 B020                            mov al, ' '
+   835 000004BA AB                              stosw
+   836 000004BB B052                            mov al, 'R' ; Resume the game after pausing
+   837 000004BD AB                              stosw
+   838 000004BE B065                            mov al, 'e'
+   839 000004C0 AB                              stosw
+   840 000004C1 B073                            mov al, 's'
+   841 000004C3 AB                              stosw
+   842 000004C4 B075                            mov al, 'u'
+   843 000004C6 AB                              stosw
+   844 000004C7 B06D                            mov al, 'm'
+   845 000004C9 AB                              stosw
+   846 000004CA B065                            mov al, 'e'
+   847 000004CC AB                              stosw
+   848 000004CD B020                            mov al, ' '
+   849 000004CF AB                              stosw
+   850 000004D0 B074                            mov al, 't'
+   851 000004D2 AB                              stosw
+   852 000004D3 B068                            mov al, 'h'
+   853 000004D5 AB                              stosw
+   854 000004D6 B065                            mov al, 'e'
+   855 000004D8 AB                              stosw
+   856 000004D9 B020                            mov al, ' '
+   857 000004DB AB                              stosw
+   858 000004DC B067                            mov al, 'g'
+   859 000004DE AB                              stosw
+   860 000004DF B061                            mov al, 'a'
+   861 000004E1 AB                              stosw
+   862 000004E2 B06D                            mov al, 'm'
+   863 000004E4 AB                              stosw
+   864 000004E5 B065                            mov al, 'e'
+   865 000004E7 AB                              stosw
+   866 000004E8 B020                            mov al, ' '
+   867 000004EA AB                              stosw
+   868 000004EB B061                            mov al, 'a'
+   869 000004ED AB                              stosw
+   870 000004EE B066                            mov al, 'f'
+   871 000004F0 AB                              stosw
+   872 000004F1 B074                            mov al, 't'
+   873 000004F3 AB                              stosw
+   874 000004F4 B065                            mov al, 'e'
+   875 000004F6 AB                              stosw
+   876 000004F7 B072                            mov al, 'r'
+   877 000004F9 AB                              stosw
+   878 000004FA B020                            mov al, ' '
+   879 000004FC AB                              stosw
+   880 000004FD B070                            mov al, 'p'
+   881 000004FF AB                              stosw
+   882 00000500 B061                            mov al, 'a'
+   883 00000502 AB                              stosw
+   884 00000503 B075                            mov al, 'u'
+   885 00000505 AB                              stosw
+   886 00000506 B073                            mov al, 's'
+   887 00000508 AB                              stosw
+   888 00000509 B069                            mov al, 'i'
+   889 0000050B AB                              stosw
+   890 0000050C B06E                            mov al, 'n'
+   891 0000050E AB                              stosw
+   892 0000050F B067                            mov al, 'g'
+   893 00000511 AB                              stosw
+   894                                  
+   895                                          ; --- Line 7: " Press 'Q' to Quit and return to main menu" ---
+   896                                          ; Target Row: 11 (0-indexed: 10), Col 17
+   897 00000512 BF6206                          mov di, (10 * 80 + 17) * 2
+   898 00000515 B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   899 00000517 B020                            mov al, ' '                   ; Leading space for alignment
+   900 00000519 AB                              stosw
+   901 0000051A B050                            mov al, 'P' ; Press
+   902 0000051C AB                              stosw
+   903 0000051D B072                            mov al, 'r'
+   904 0000051F AB                              stosw
+   905 00000520 B065                            mov al, 'e'
+   906 00000522 AB                              stosw
+   907 00000523 B073                            mov al, 's'
+   908 00000525 AB                              stosw
+   909 00000526 B073                            mov al, 's'
+   910 00000528 AB                              stosw
+   911 00000529 B020                            mov al, ' '
+   912 0000052B AB                              stosw
+   913 0000052C B027                            mov al, 0x27 ; '
+   914 0000052E AB                              stosw
+   915 0000052F B051                            mov al, 'Q'  ; Q
+   916 00000531 AB                              stosw
+   917 00000532 B027                            mov al, 0x27 ; '
+   918 00000534 AB                              stosw
+   919 00000535 B020                            mov al, ' '
+   920 00000537 AB                              stosw
+   921 00000538 B074                            mov al, 't' ; to
+   922 0000053A AB                              stosw
+   923 0000053B B06F                            mov al, 'o'
+   924 0000053D AB                              stosw
+   925 0000053E B020                            mov al, ' '
+   926 00000540 AB                              stosw
+   927 00000541 B051                            mov al, 'Q' ; Quit and return to main menu
+   928 00000543 AB                              stosw
+   929 00000544 B075                            mov al, 'u'
+   930 00000546 AB                              stosw
+   931 00000547 B069                            mov al, 'i'
+   932 00000549 AB                              stosw
+   933 0000054A B074                            mov al, 't'
+   934 0000054C AB                              stosw
+   935 0000054D B020                            mov al, ' '
+   936 0000054F AB                              stosw
+   937 00000550 B061                            mov al, 'a'
+   938 00000552 AB                              stosw
+   939 00000553 B06E                            mov al, 'n'
+   940 00000555 AB                              stosw
+   941 00000556 B064                            mov al, 'd'
+   942 00000558 AB                              stosw
+   943 00000559 B020                            mov al, ' '
+   944 0000055B AB                              stosw
+   945 0000055C B072                            mov al, 'r'
+   946 0000055E AB                              stosw
+   947 0000055F B065                            mov al, 'e'
+   948 00000561 AB                              stosw
+   949 00000562 B074                            mov al, 't'
+   950 00000564 AB                              stosw
+   951 00000565 B075                            mov al, 'u'
+   952 00000567 AB                              stosw
+   953 00000568 B072                            mov al, 'r'
+   954 0000056A AB                              stosw
+   955 0000056B B06E                            mov al, 'n'
+   956 0000056D AB                              stosw
+   957 0000056E B020                            mov al, ' '
+   958 00000570 AB                              stosw
+   959 00000571 B074                            mov al, 't'
+   960 00000573 AB                              stosw
+   961 00000574 B06F                            mov al, 'o'
+   962 00000576 AB                              stosw
+   963 00000577 B020                            mov al, ' '
+   964 00000579 AB                              stosw
+   965 0000057A B06D                            mov al, 'm'
+   966 0000057C AB                              stosw
+   967 0000057D B061                            mov al, 'a'
+   968 0000057F AB                              stosw
+   969 00000580 B069                            mov al, 'i'
+   970 00000582 AB                              stosw
+   971 00000583 B06E                            mov al, 'n'
+   972 00000585 AB                              stosw
+   973 00000586 B020                            mov al, ' '
+   974 00000588 AB                              stosw
+   975 00000589 B06D                            mov al, 'm'
+   976 0000058B AB                              stosw
+   977 0000058C B065                            mov al, 'e'
+   978 0000058E AB                              stosw
+   979 0000058F B06E                            mov al, 'n'
+   980 00000591 AB                              stosw
+   981 00000592 B075                            mov al, 'u'
+   982 00000594 AB                              stosw
+   983                                  
+   984                                          ; --- Line 8: " Press 'U' to Restart the current game" ---
+   985                                          ; Target Row: 12 (0-indexed: 11), Col 17
+   986 00000595 BF0207                          mov di, (11 * 80 + 17) * 2
+   987 00000598 B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+   988 0000059A B020                            mov al, ' '                   ; Leading space for alignment
+   989 0000059C AB                              stosw
+   990 0000059D B050                            mov al, 'P' ; Press
+   991 0000059F AB                              stosw
+   992 000005A0 B072                            mov al, 'r'
+   993 000005A2 AB                              stosw
+   994 000005A3 B065                            mov al, 'e'
+   995 000005A5 AB                              stosw
+   996 000005A6 B073                            mov al, 's'
+   997 000005A8 AB                              stosw
+   998 000005A9 B073                            mov al, 's'
+   999 000005AB AB                              stosw
+  1000 000005AC B020                            mov al, ' '
+  1001 000005AE AB                              stosw
+  1002 000005AF B027                            mov al, 0x27 ; '
+  1003 000005B1 AB                              stosw
+  1004 000005B2 B055                            mov al, 'U'  ; U
+  1005 000005B4 AB                              stosw
+  1006 000005B5 B027                            mov al, 0x27 ; '
+  1007 000005B7 AB                              stosw
+  1008 000005B8 B020                            mov al, ' '
+  1009 000005BA AB                              stosw
+  1010 000005BB B074                            mov al, 't' ; to
+  1011 000005BD AB                              stosw
+  1012 000005BE B06F                            mov al, 'o'
+  1013 000005C0 AB                              stosw
+  1014 000005C1 B020                            mov al, ' '
+  1015 000005C3 AB                              stosw
+  1016 000005C4 B052                            mov al, 'R' ; Restart the current game
+  1017 000005C6 AB                              stosw
+  1018 000005C7 B065                            mov al, 'e'
+  1019 000005C9 AB                              stosw
+  1020 000005CA B073                            mov al, 's'
+  1021 000005CC AB                              stosw
+  1022 000005CD B074                            mov al, 't'
+  1023 000005CF AB                              stosw
+  1024 000005D0 B061                            mov al, 'a'
+  1025 000005D2 AB                              stosw
+  1026 000005D3 B072                            mov al, 'r'
+  1027 000005D5 AB                              stosw
+  1028 000005D6 B074                            mov al, 't'
+  1029 000005D8 AB                              stosw
+  1030 000005D9 B020                            mov al, ' '
+  1031 000005DB AB                              stosw
+  1032 000005DC B074                            mov al, 't'
+  1033 000005DE AB                              stosw
+  1034 000005DF B068                            mov al, 'h'
+  1035 000005E1 AB                              stosw
+  1036 000005E2 B065                            mov al, 'e'
+  1037 000005E4 AB                              stosw
+  1038 000005E5 B020                            mov al, ' '
+  1039 000005E7 AB                              stosw
+  1040 000005E8 B063                            mov al, 'c'
+  1041 000005EA AB                              stosw
+  1042 000005EB B075                            mov al, 'u'
+  1043 000005ED AB                              stosw
+  1044 000005EE B072                            mov al, 'r'
+  1045 000005F0 AB                              stosw
+  1046 000005F1 B072                            mov al, 'r'
+  1047 000005F3 AB                              stosw
+  1048 000005F4 B065                            mov al, 'e'
+  1049 000005F6 AB                              stosw
+  1050 000005F7 B06E                            mov al, 'n'
+  1051 000005F9 AB                              stosw
+  1052 000005FA B074                            mov al, 't'
+  1053 000005FC AB                              stosw
+  1054 000005FD B020                            mov al, ' '
+  1055 000005FF AB                              stosw
+  1056 00000600 B067                            mov al, 'g'
+  1057 00000602 AB                              stosw
+  1058 00000603 B061                            mov al, 'a'
+  1059 00000605 AB                              stosw
+  1060 00000606 B06D                            mov al, 'm'
+  1061 00000608 AB                              stosw
+  1062 00000609 B065                            mov al, 'e'
+  1063 0000060B AB                              stosw
+  1064                                  
+  1065                                          ; --- Prompt: "Press any key to return to menu..." ---
+  1066                                          ; Length: 34. Target Row: 15 (0-indexed: 14), Col 23 (centered)
+  1067 0000060C BFEE08                          mov di, (14 * 80 + 23) * 2
+  1068 0000060F B43F                            mov ah, 0x3F                  ; Attribute: Bright White on Cyan
+  1069 00000611 B050                            mov al, 'P'
+  1070 00000613 AB                              stosw
+  1071 00000614 B072                            mov al, 'r'
+  1072 00000616 AB                              stosw
+  1073 00000617 B065                            mov al, 'e'
+  1074 00000619 AB                              stosw
+  1075 0000061A B073                            mov al, 's'
+  1076 0000061C AB                              stosw
+  1077 0000061D B073                            mov al, 's'
+  1078 0000061F AB                              stosw
+  1079 00000620 B020                            mov al, ' '
+  1080 00000622 AB                              stosw
+  1081 00000623 B061                            mov al, 'a'
+  1082 00000625 AB                              stosw
+  1083 00000626 B06E                            mov al, 'n'
+  1084 00000628 AB                              stosw
+  1085 00000629 B079                            mov al, 'y'
+  1086 0000062B AB                              stosw
+  1087 0000062C B020                            mov al, ' '
+  1088 0000062E AB                              stosw
+  1089 0000062F B06B                            mov al, 'k'
+  1090 00000631 AB                              stosw
+  1091 00000632 B065                            mov al, 'e'
+  1092 00000634 AB                              stosw
+  1093 00000635 B079                            mov al, 'y'
+  1094 00000637 AB                              stosw
+  1095 00000638 B020                            mov al, ' '
+  1096 0000063A AB                              stosw
+  1097 0000063B B074                            mov al, 't'
+  1098 0000063D AB                              stosw
+  1099 0000063E B06F                            mov al, 'o'
+  1100 00000640 AB                              stosw
+  1101 00000641 B020                            mov al, ' '
+  1102 00000643 AB                              stosw
+  1103 00000644 B072                            mov al, 'r'
+  1104 00000646 AB                              stosw
+  1105 00000647 B065                            mov al, 'e'
+  1106 00000649 AB                              stosw
+  1107 0000064A B074                            mov al, 't'
+  1108 0000064C AB                              stosw
+  1109 0000064D B075                            mov al, 'u'
+  1110 0000064F AB                              stosw
+  1111 00000650 B072                            mov al, 'r'
+  1112 00000652 AB                              stosw
+  1113 00000653 B06E                            mov al, 'n'
+  1114 00000655 AB                              stosw
+  1115 00000656 B020                            mov al, ' '
+  1116 00000658 AB                              stosw
+  1117 00000659 B074                            mov al, 't'
+  1118 0000065B AB                              stosw
+  1119 0000065C B06F                            mov al, 'o'
+  1120 0000065E AB                              stosw
+  1121 0000065F B020                            mov al, ' '
+  1122 00000661 AB                              stosw
+  1123 00000662 B06D                            mov al, 'm'
+  1124 00000664 AB                              stosw
+  1125 00000665 B065                            mov al, 'e'
+  1126 00000667 AB                              stosw
+  1127 00000668 B06E                            mov al, 'n'
+  1128 0000066A AB                              stosw
+  1129 0000066B B075                            mov al, 'u'
+  1130 0000066D AB                              stosw
+  1131 0000066E B02E                            mov al, '.'
+  1132 00000670 AB                              stosw
+  1133 00000671 B02E                            mov al, '.'
+  1134 00000673 AB                              stosw
+  1135 00000674 B02E                            mov al, '.'
+  1136 00000676 AB                              stosw
+  1137                                  
+  1138                                  
+  1139                                  wait_for_key:
+  1140 00000677 B400                            mov ah, 00h             ; Read keyboard input
+  1141 00000679 CD16                            int 0x16                ; Wait for key
+  1142 0000067B E995F9                          jmp menu                ; Return to menu
+  1143                                  
+  1144                                  fb21:   ; STARTING POINT OF THE GAME
+  1145 0000067E BFA00F                          mov di,pipe     ; Init variables in video segment (saves big bytes)
+  1146 00000681 31C0                            xor ax,ax
+  1147 00000683 AB                              stosw           ; pipe
+  1148 00000684 AB                              stosw           ; score
+  1149 00000685 AB                              stosw           ; grav
+  1150 00000686 B0A0                            mov al,0xa0
+  1151 00000688 AB                              stosw           ; next
+  1152 00000689 B060                            mov al,0x60
+  1153 0000068B AB                              stosw           ; bird
+  1154                                  
+  1155                                          ; Initialize extra life for this game session
+  1156 0000068C C606AF0F01                      mov byte [extra_life_available], 1
+  1157                                          ; --- START: Initialize Invincibility at Game Start ---
+  1158 00000691 C606B30F05                      mov byte [invincibility_uses_left], 5 ; Max 5 uses per game
+  1159 00000696 C606B40F00                      mov byte [invincibility_active], 0   ; Not active initially
+  1160 0000069B C706B50F0000                    mov word [invincibility_timer], 0    ; Timer starts at 0
+  1161                                          ; --- END: Initialize Invincibility at Game Start ---
+  1162                                  
+  1163 000006A1 BF4A00                          mov di,0x004a   ; Game title position
+  1164                                  
+  1165 000006A4 B8471F                          mov ax, 0x1f47 ; 'G' in white on BLUE
+  1166 000006A7 AB                              stosw
+  1167 000006A8 B8521F                          mov ax, 0x1f52 ; 'R' in white on BLUE
+  1168 000006AB AB                              stosw
+  1169 000006AC B84F1F                          mov ax, 0x1f4f ; 'O' in white on BLUE
+  1170 000006AF AB                              stosw
+  1171 000006B0 B8551F                          mov ax, 0x1f55 ; 'U' in white on BLUE
+  1172 000006B3 AB                              stosw
+  1173 000006B4 B8501F                          mov ax, 0x1f50 ; 'P' in white on BLUE
+  1174 000006B7 AB                              stosw
+  1175 000006B8 B8201F                          mov ax, 0x1f20 ; Space in white on BLUE
+  1176 000006BB AB                              stosw
+  1177 000006BC B8331F                          mov ax, 0x1f33 ; '3' in white on BLUE
+  1178 000006BF AB                              stosw
+  1179 000006C0 B83A1F                          mov ax, 0x1f3a ; ':' in white on BLUE
+  1180 000006C3 AB                              stosw
+  1181 000006C4 B8201F                          mov ax, 0x1f20 ; Space in white on BLUE
+  1182 000006C7 AB                              stosw
+  1183 000006C8 B8481F                          mov ax, 0x1f48 ; 'H' in white on BLUE
+  1184 000006CB AB                              stosw
+  1185 000006CC B8411F                          mov ax, 0x1f41 ; 'A' in white on BLUE
+  1186 000006CF AB                              stosw
+  1187 000006D0 B8521F                          mov ax, 0x1f52 ; 'R' in white on BLUE
+  1188 000006D3 AB                              stosw
+  1189 000006D4 B8491F                          mov ax, 0x1f49 ; 'I' in white on BLUE
+  1190 000006D7 AB                              stosw
+  1191 000006D8 B8421F                          mov ax, 0x1f42 ; 'B' in white on BLUE
+  1192 000006DB AB                              stosw
+  1193 000006DC B8491F                          mov ax, 0x1f49 ; 'I' in white on BLUE
+  1194 000006DF AB                              stosw
+  1195 000006E0 B8521F                          mov ax, 0x1f52 ; 'R' in white on BLUE
+  1196 000006E3 AB                              stosw
+  1197 000006E4 B8441F                          mov ax, 0x1f44 ; 'D' in white on BLUE
+  1198 000006E7 AB                              stosw
+  1199                                  
+  1200 000006E8 B95000                          mov cx,80       ; Introduce 80 columns of scenery
+  1201 000006EB 51                      fb1:    push cx
+  1202 000006EC E8BA06                          call scroll_scenery
+  1203 000006EF 59                              pop cx
+  1204 000006F0 E2F9                            loop fb1
+  1205                                  
+  1206 000006F2 B401                    fb23:   mov ah,0x01     ; Check if key pressed
+  1207 000006F4 CD16                            int 0x16
+  1208 000006F6 9C                              pushf
+  1209 000006F7 31C0                            xor ax,ax       ; Wait for a key
+  1210 000006F9 CD16                            int 0x16
+  1211 000006FB 9D                              popf
+  1212 000006FC 75F4                            jnz fb23        ; Jump if key was accumulated, if not already waited for key
+  1213                                  
+  1214                                          ;
+  1215                                          ; Main loop
+  1216                                          ;
+  1217                                  fb12:   ; Calculate bird's new vertical position and screen offset
+  1218 000006FE A0A80F                          mov al,[bird]
+  1219 00000701 0206A40F                        add al,[grav]
+  1220 00000705 A2A80F                          mov [bird],al
+  1221 00000708 24F8                            and al,0xf8     ; Mask fraction for row calculation
+  1222 0000070A B414                            mov ah,0x14     ; Multiply by 20 (80 columns * 2 bytes/char / 8 = 20)
+  1223 0000070C F6E4                            mul ah          ; AX = screen row offset
+  1224 0000070E 052000                          add ax,$0020    ; Add fixed column offset (column 16)
+  1225 00000711 97                              xchg ax,di      ; DI holds the screen memory offset for the bird's tail (◄)
+  1226                                  
+  1227                                          ; --- START OF NEW BIRD DRAWING, COLLISION, AND ERASING LOGIC ---
+  1228                                          ; Bird design: Wings Up: ▲ / ◄░██(•► , Wings Down: ◄░▀▀(•►
+  1229                                          ; Bird is 7 characters long, from di to di+12.
+  1230                                  
+  1231                                          ; Check for invincibility first
+  1232 00000712 803EB40F01                      cmp byte [invincibility_active], 1
+  1233 00000717 0F847F00                        je near .draw_bird_and_continue ; If invincible, skip collision check and draw directly
+  1234                                  
+  1235                                          ; New Collision Detection (bird is ◄░██(•► or ◄░▀▀(•► from di to di+12)
+  1236 0000071B 268A05                          mov al, [es:di]     ; Tail ◄ at di
+  1237 0000071E 3C20                            cmp al, 0x20
+  1238 00000720 7545                            jne .collision_detected_new_impl
+  1239 00000722 268A4502                        mov al, [es:di+2]   ; Body ░ at di+2
+  1240 00000726 3C20                            cmp al, 0x20
+  1241 00000728 753D                            jne .collision_detected_new_impl
+  1242 0000072A 268A4504                        mov al, [es:di+4]   ; Body █/▀ (first part) at di+4
+  1243 0000072E 3C20                            cmp al, 0x20
+  1244 00000730 7535                            jne .collision_detected_new_impl
+  1245 00000732 268A4506                        mov al, [es:di+6]   ; Body █/▀ (second part) at di+6
+  1246 00000736 3C20                            cmp al, 0x20
+  1247 00000738 752D                            jne .collision_detected_new_impl
+  1248 0000073A 268A4508                        mov al, [es:di+8]   ; Body ( at di+8
+  1249 0000073E 3C20                            cmp al, 0x20
+  1250 00000740 7525                            jne .collision_detected_new_impl
+  1251 00000742 268A450A                        mov al, [es:di+10]  ; Head 0 (was •) at di+10
+  1252 00000746 3C20                            cmp al, 0x20
+  1253 00000748 751D                            jne .collision_detected_new_impl
+  1254 0000074A 268A450C                        mov al, [es:di+12]  ; Beak ► at di+12
+  1255 0000074E 3C20                            cmp al, 0x20
+  1256 00000750 7515                            jne .collision_detected_new_impl
+  1257                                  
+  1258 00000752 8A1EAC0F                        mov bl, [frame]
+  1259 00000756 80E304                          and bl, 4           ; Check 3rd bit of frame counter for flap state
+  1260 00000759 7409                            jz .skip_upper_wing_collision_check_new ; If zero, it's flap_down (◄░▀▀(•►), so skip upper wing check
+  1261                                          ; Collision check for upper wing ▲ (for ◄░██(•► design)
+  1262 0000075B 268A8564FF                      mov al, [es:di-160+4] ; Position of upper wing ▲ (above the first █ of body)
+  1263 00000760 3C20                            cmp al, 0x20
+  1264 00000762 7503                            jne .collision_detected_new_impl
+  1265                                  .skip_upper_wing_collision_check_new:
+  1266 00000764 E93300                          jmp .draw_bird_and_continue
+  1267                                  
+  1268                                  .collision_detected_new_impl:
+  1269 00000767 893EB00F                        mov [saved_crash_di], di
+  1270                                      ;——— PC‑Speaker beep @ ~1 kHz ———
+  1271                                      ; 1) Tell PIT channel 2 we want mode 3 (square wave)
+  1272 0000076B B0B6                        mov    al, 0xB6        ; 1011 0110b: Ch2, lo/hi, mode3, binary
+  1273 0000076D E643                        out    0x43, al
+  1274                                  
+  1275                                      ; 2) Send divisor = 1193 → ~1 000 Hz
+  1276 0000076F BBA904                      mov    bx, 1193
+  1277 00000772 88D8                        mov    al, bl          ; low byte
+  1278 00000774 E642                        out    0x42, al
+  1279 00000776 88F8                        mov    al, bh          ; high byte
+  1280 00000778 E642                        out    0x42, al
+  1281                                  
+  1282                                      ; 3) Turn speaker ON (port 0x61 bits 0+1)
+  1283 0000077A E461                        in     al, 0x61
+  1284 0000077C 0C03                        or     al, 00000011b
+  1285 0000077E E661                        out    0x61, al
+  1286                                  
+  1287                                      ; 4) Simple delay (adjust CX for length)
+  1288 00000780 B90040                      mov    cx, 0x4000
+  1289                                  .tone_delay:
+  1290 00000783 E2FE                        loop   .tone_delay
+  1291                                  
+  1292                                      ; 5) Turn speaker OFF
+  1293 00000785 E461                        in     al, 0x61
+  1294 00000787 24FC                        and    al, 11111100b
+  1295 00000789 E661                        out    0x61, al
+  1296                                      ;———————————————————————————————
+  1297                                          ; Draw crash symbols '**' over the bird's body (on the █/▀ parts)
+  1298 0000078B 26C745042A3C                    mov word [es:di+4], 0x3C2A   ; Attribute 0x3C (Bright Red/Cyan), Char 0x2A ('*')
+  1299 00000791 26C745062A3C                    mov word [es:di+6], 0x3C2A   ; Attribute 0x3C (Bright Red/Cyan), Char 0x2A ('*')
+  1300 00000797 E94603                          jmp game_over_check_extra_life
+  1301                                  
+  1302                                  .draw_bird_and_continue:
+  1303 0000079A A0AC0F                          mov al, [frame]
+  1304 0000079D 2404                            and al, 4
+  1305 0000079F 7433                            jz .flap_up_new_impl ; If bit is 0, flap up (◄░██(•► with ▲)
+  1306                                  
+  1307                                  .flap_down_new_impl: ; Bird state: ◄░▀▀(•►
+  1308 000007A1 26C78564FF2030              mov word [es:di-160+4], 0x3020   ; Erase potential upper wing ▲ (Space on Cyan: Attr 0x30, Char 0x20)
+  1309 000007A8 26C705113E                  mov word [es:di],     0x3E11     ; ◄ tail (Char 0x11) (Yellow on Cyan: Attr 0x3E)
+  1310 000007AD 26C74502B03E                mov word [es:di+2],   0x3EB0     ; ░ body (Char 0xB0)
+  1311 000007B3 26C74504DC3E                mov word [es:di+4],   0x3EDC     ; ▀ wing/body (Char 0xDC - Lower half block)
+  1312 000007B9 26C74506DC3E                mov word [es:di+6],   0x3EDC     ; ▀ wing/body (Char 0xDC - Lower half block)
+  1313 000007BF 26C74508283E                mov word [es:di+8],   0x3E28     ; ( body (Char 0x28)
+  1314 000007C5 26C7450A303E                mov word [es:di+10],  0x3E30     ; 0 head/eye (Char 0x30 - digit zero)
+  1315 000007CB 26C7450C103E                mov word [es:di+12],  0x3E10     ; ► beak (Char 0x10)
+  1316 000007D1 E93000                      jmp .after_draw_new_impl
+  1317                                  
+  1318                                  .flap_up_new_impl: ; Bird state: ▲ / ◄░██(•►
+  1319 000007D4 26C78564FF1E3E              mov word [es:di-160+4], 0x3E1E   ; ▲ upper wing (Char 0x1E) (Yellow on Cyan: Attr 0x3E)
+  1320 000007DB 26C705113E                  mov word [es:di],     0x3E11     ; ◄ tail (Char 0x11)
+  1321 000007E0 26C74502B03E                mov word [es:di+2],   0x3EB0     ; ░ body (Char 0xB0)
+  1322 000007E6 26C74504DB3E                mov word [es:di+4],   0x3EDB     ; █ body (Char 0xDB - Full block)
+  1323 000007EC 26C74506DB3E                mov word [es:di+6],   0x3EDB     ; █ body (Char 0xDB - Full block)
+  1324 000007F2 26C74508283E                mov word [es:di+8],   0x3E28     ; ( body (Char 0x28)
+  1325 000007F8 26C7450A303E                mov word [es:di+10],  0x3E30     ; 0 head/eye (Char 0x30 - digit zero)
+  1326 000007FE 26C7450C103E                mov word [es:di+12],  0x3E10     ; ► beak (Char 0x10)
+  1327                                  
+  1328                                  .after_draw_new_impl:
+  1329 00000804 E89C06                      call display_status_messages
+  1330 00000807 E82D06                      call wait_frame
+  1331                                  
+  1332                                      ; Erase bird (7 characters + 1 optional upper wing)
+  1333 0000080A B82030                      mov ax, 0x3020       ; Space on Cyan background (Attribute 0x30, Char 0x20)
+  1334 0000080D 26898564FF                  mov [es:di-160+4], ax  ; Erase upper wing location
+  1335 00000812 268905                      mov [es:di], ax        ; Erase ◄
+  1336 00000815 26894502                    mov [es:di+2], ax      ; Erase ░
+  1337 00000819 26894504                    mov [es:di+4], ax      ; Erase █/▀
+  1338 0000081D 26894506                    mov [es:di+6], ax      ; Erase █/▀
+  1339 00000821 26894508                    mov [es:di+8], ax      ; Erase (
+  1340 00000825 2689450A                    mov [es:di+10], ax     ; Erase 0 (was •)
+  1341 00000829 2689450C                    mov [es:di+12], ax     ; Erase ►
+  1342                                  
+  1343 0000082D A0AC0F                      mov al,[frame]
+  1344 00000830 2407                        and al,7
+  1345 00000832 7504                        jnz .skip_gravity_inc_for_new_bird
+  1346 00000834 FF06A40F                    inc word [grav]
+  1347                                  .skip_gravity_inc_for_new_bird:
+  1348                                      ; --- END OF NEW BIRD LOGIC ---
+  1349                                  
+  1350 00000838 E90000                      jmp perform_difficulty_scrolling ; Jump to pipe scrolling section
+  1351                                  
+  1352                                  perform_difficulty_scrolling:
+  1353 0000083B 30C0                        xor al, al
+  1354 0000083D A0AE0F                      mov al, [user_choice]
+  1355 00000840 3C01                        cmp al, 1
+  1356 00000842 740E                        je .scroll_easy
+  1357 00000844 3C02                        cmp al, 2
+  1358 00000846 7413                        je .scroll_medium
+  1359 00000848 3C03                        cmp al, 3
+  1360 0000084A 741B                        je .scroll_hard
+  1361                                  
+  1362                                      ; Default scroll (should not be reached if user_choice is always 1, 2, or 3)
+  1363 0000084C E85A05                      call scroll_scenery
+  1364 0000084F E92100                      jmp after_scrolling_logic
+  1365                                  
+  1366                                  .scroll_easy:
+  1367 00000852 E85405                      call scroll_scenery
+  1368 00000855 E85105                      call scroll_scenery
+  1369 00000858 E91800                      jmp after_scrolling_logic
+  1370                                  
+  1371                                  .scroll_medium:
+  1372 0000085B E84B05                      call scroll_scenery
+  1373 0000085E E84805                      call scroll_scenery
+  1374 00000861 E84505                      call scroll_scenery
+  1375 00000864 E90C00                      jmp after_scrolling_logic
+  1376                                  
+  1377                                  .scroll_hard:
+  1378 00000867 E83F05                      call scroll_scenery
+  1379 0000086A E83C05                      call scroll_scenery
+  1380 0000086D E83905                      call scroll_scenery
+  1381 00000870 E83605                      call scroll_scenery
+  1382                                      ; Fall through to after_scrolling_logic
+  1383                                  
+  1384                                  after_scrolling_logic:
+  1385                                      ; This is where the old fb_end logic (score checking, input) begins
+  1386 00000873 803EA000B0                  cmp byte [0x00a0], 0xb0     ; Check if first char of pipe line is a pipe segment
+  1387 00000878 7405                        jz fb27
+  1388 0000087A 803EA200B0                  cmp byte [0x00a2], 0xb0     ; Check second char
+  1389                                  
+  1390 0000087F 7548                    fb27:   jnz fb24                     ; If not pipe, don't increment score
+  1391 00000881 FF06A20F                        inc word [score]             ; Increment score
+  1392 00000885 B0B6                     mov al, 0xB6            ; Select PIT channel 2, mode 3 (square wave)
+  1393 00000887 E643                        out (0x43), al
+  1394                                  
+  1395                                      ; Turn speaker on FIRST
+  1396 00000889 E461                        in  al, (0x61)          ; Read port 0x61
+  1397 0000088B 0C03                        or  al, 0x03            ; enable speaker
+  1398 0000088D E661                        out (0x61), al          ; Write back to enable speaker sound
+  1399                                  
+  1400                                      ; First, higher pitch (briefly)
+  1401 0000088F B88001                      mov ax, 0x0180          ; divisor = 384 -> frequency ≈ 3107 Hz (high pitch)
+  1402 00000892 E642                        out (0x42), al          ; Send low byte of divisor
+  1403 00000894 88E0                        mov al, ah              ; high byte
+  1404 00000896 E642                        out (0x42), al          ; Send high byte of divisor
+  1405                                      ; No explicit delay here, we want it to change quickly
+  1406                                      ; For a very short blip of this first tone, you might add a few NOPs or a tiny delay loop
+  1407                                      ; For example:
+  1408                                      ; mov cx, 5000
+  1409                                      ; .short_delay_zap:
+  1410                                      ;   dec cx
+  1411                                      ;   jnz .short_delay_zap
+  1412                                  
+  1413                                      ; Second, slightly lower pitch (this one will be held for wait_frame)
+  1414 00000898 B88002                      mov ax, 0x0280          ; divisor = 640 -> frequency ≈ 1864 Hz (mid-high pitch)
+  1415 0000089B E642                        out (0x42), al          ; Send low byte of divisor
+  1416 0000089D 88E0                        mov al, ah              ; high byte
+  1417 0000089F E642                        out (0x42), al          ; Send high byte of divisor
+  1418                                  
+  1419 000008A1 E89305                      call wait_frame         ; wait a bit so the second tone is audible
+  1420                                  
+  1421                                      ; Turn speaker off
+  1422 000008A4 E461                        in  al, (0x61)          ; read port 0x61 again
+  1423 000008A6 24FC                        and al, 0xFC            ; disable speaker
+  1424 000008A8 E661                        out (0x61), al          ; Write back to disable speaker sound
+  1425                                  
+  1426 000008AA A1A20F                          mov ax,[score]
+  1427 000008AD BF8E00                          mov di,0x008e                ; Position for score display (top right)
+  1428 000008B0 31D2                    fb25:   xor dx,dx                    ; Clear DX for division
+  1429 000008B2 BB0A00                          mov bx,10                    ; Divisor for BCD conversion
+  1430 000008B5 F7F3                            div bx                       ; AX = AX / 10, DX = remainder
+  1431 000008B7 81C2303E                        add dx,0x3E30                ; Convert remainder to ASCII char, Bright Red on CYAN (Attr 0x3C, '0' is 0x30)
+  1432 000008BB 92                              xchg ax,dx                   ; Use DX (char) for stosw, save quotient in AX
+  1433 000008BC FD                              std                          ; Set direction flag for stosw to decrement DI (right to left display)
+  1434 000008BD AB                              stosw                        ; Store char and attribute
+  1435 000008BE 26C7052037                      mov word [es:di],0x3720      ; Clean next char position with space, Light Gray on CYAN
+  1436 000008C3 FC                              cld                          ; Clear direction flag
+  1437 000008C4 92                              xchg ax,dx                   ; Restore quotient to AX
+  1438 000008C5 09C0                            or ax,ax                     ; Check if quotient is zero
+  1439 000008C7 75E7                            jnz fb25                     ; Loop if not zero
+  1440 000008C9 B401                    fb24:   mov ah,0x01                  ; Check for key press (non-blocking)
+  1441 000008CB CD16                            int 0x16
+  1442 000008CD 0F840C02                        jz near fb26                 ; If no key pressed, jump to loop start
+  1443                                  
+  1444 000008D1 B400                            mov ah,0x00                  ; Key pressed, get it (blocking)
+  1445 000008D3 CD16                            int 0x16                     ; AL = ASCII code, AH = scan code
+  1446                                  
+  1447 000008D5 3C1B                            cmp al,0x1b                  ; ESC key?
+  1448 000008D7 7413                            je exit_game_to_dos          ; Exit to DOS
+  1449                                  
+  1450 000008D9 3C70                            cmp al,'p'                   ; 'p' for pause?
+  1451 000008DB 7411                            je handle_game_pause_jmp     ; Jump to pause handler
+  1452 000008DD 3C50                            cmp al,'P'                   ; 'P' for pause?
+  1453 000008DF 740D                            je handle_game_pause_jmp     ; Jump to pause handler
+  1454                                  
+  1455 000008E1 3C69                            cmp al, 'i'                  ; 'i' for invincibility?
+  1456 000008E3 740C                            je process_invincibility_key_attempt
+  1457 000008E5 3C49                            cmp al, 'I'                  ; 'I' for invincibility?
+  1458 000008E7 7408                            je process_invincibility_key_attempt
+  1459                                          
+  1460 000008E9 E95101                          jmp near fb4                 ; If other key (space assumed for flap), jump to flap logic
+  1461                                  
+  1462                                          exit_game_to_dos:
+  1463 000008EC CD20                            int 0x20                     ; Terminate program
+  1464                                  
+  1465                                          handle_game_pause_jmp:
+  1466 000008EE E92600                          jmp handle_pause             ; Jump to pause handling routine
+  1467                                  
+  1468                                          process_invincibility_key_attempt:
+  1469 000008F1 803EB40F01                      cmp byte [invincibility_active], 1 ; Already active?
+  1470 000008F6 7503                            jne try_activate_invincibility_check_uses ; If not, try to activate
+  1471 000008F8 E9E201                          jmp near fb26                             ; If active, ignore key, continue game loop
+  1472                                  
+  1473                                          try_activate_invincibility_check_uses:
+  1474 000008FB 803EB30F00                      cmp byte [invincibility_uses_left], 0 ; Any uses left?
+  1475 00000900 7503                            jne can_activate_this_invincibility   ; If yes, activate
+  1476 00000902 E9D801                          jmp near fb26                         ; If no uses left, ignore key, continue
+  1477                                  
+  1478                                          can_activate_this_invincibility:
+  1479 00000905 C606B40F01                      mov byte [invincibility_active], 1    ; Activate invincibility
+  1480 0000090A FE0EB30F                        dec byte [invincibility_uses_left]    ; Decrement uses left
+  1481 0000090E C706B50F9100                    mov word [invincibility_timer], 145   ; Set timer (approx 8 seconds at ~18.2 ticks/sec)
+  1482 00000914 E9C601                          jmp near fb26                         ; Continue game loop
+  1483                                  
+  1484                                  handle_pause:
+  1485 00000917 C606B20F01                      mov byte [paused], 1        ; Set paused flag
+  1486 0000091C E83900                          call display_pause_menu     ; Show pause menu
+  1487                                  pause_input_loop:
+  1488 0000091F B400                            mov ah, 00h                 ; Wait for key press
+  1489 00000921 CD16                            int 0x16                    
+  1490                                          
+  1491 00000923 3C72                            cmp al, 'r'                 ; 'r' to resume?
+  1492 00000925 7420                            je resume_game
+  1493 00000927 3C52                            cmp al, 'R'                 ; 'R' to resume?
+  1494 00000929 741C                            je resume_game
+  1495                                          
+  1496 0000092B 3C71                            cmp al, 'q'                 ; 'q' to quit to menu?
+  1497 0000092D 7423                            je quit_to_menu
+  1498 0000092F 3C51                            cmp al, 'Q'                 ; 'Q' to quit to menu?
+  1499 00000931 741F                            je quit_to_menu
+  1500                                          
+  1501                                  	
+  1502 00000933 3C75                    	cmp al, 'u'                 ; 'u' to restart
+  1503 00000935 0F84F900                        je near restart_from_pause       ; Jump to our new restart label
+  1504 00000939 3C55                            cmp al, 'U'                 ; 'U' to restart (uppercase)
+  1505 0000093B 0F84F300                        je near restart_from_pause       ; Jump to our new restart label
+  1506 0000093F 3C1B                            cmp al, 0x1b                ; ESC to quit to menu?
+  1507 00000941 0F846306                        je near exit_to_dos              ; <<< CHANGED LINE
+  1508                                  
+  1509                                          
+  1510 00000945 EBD8                            jmp pause_input_loop        ; Loop for valid pause menu input
+  1511                                  
+  1512                                  resume_game:
+  1513 00000947 C606B20F00                      mov byte [paused], 0        ; Clear paused flag
+  1514 0000094C E8BF00                          call clear_pause_menu       ; Erase pause menu from screen
+  1515 0000094F E98B01                          jmp near fb26               ; Continue game loop (effectively re-enters main loop)
+  1516                                  
+  1517                                  quit_to_menu:
+  1518 00000952 E81D05                          call clear_screen           ; Clear the game screen
+  1519 00000955 E9BBF6                          jmp menu                    ; Go back to the main menu
+  1520                                  
+  1521                                  display_pause_menu:
+  1522 00000958 BFE405                          mov di, 0x05E4 ; Row 11, Col 34
+  1523 0000095B B8473F                          mov ax, 0x3F47  ; 'G' in white on CYAN
+  1524 0000095E AB                              stosw
+  1525 0000095F B041                            mov al, 0x41    ; 'A'
+  1526 00000961 AB                              stosw
+  1527 00000962 B04D                            mov al, 0x4D    ; 'M'
+  1528 00000964 AB                              stosw
+  1529 00000965 B045                            mov al, 0x45    ; 'E'
+  1530 00000967 AB                              stosw
+  1531 00000968 B020                            mov al, 0x20    ; ' ' (space)
+  1532 0000096A AB                              stosw
+  1533 0000096B B050                            mov al, 0x50    ; 'P'
+  1534 0000096D AB                              stosw
+  1535 0000096E B041                            mov al, 0x41    ; 'A'
+  1536 00000970 AB                              stosw
+  1537 00000971 B055                            mov al, 0x55    ; 'U'
+  1538 00000973 AB                              stosw
+  1539 00000974 B053                            mov al, 0x53    ; 'S'
+  1540 00000976 AB                              stosw
+  1541 00000977 B045                            mov al, 0x45    ; 'E'
+  1542 00000979 AB                              stosw
+  1543 0000097A B044                            mov al, 0x44    ; 'D'
+  1544 0000097C AB                              stosw
+  1545                                  
+  1546 0000097D BF2207                          mov di, 0x0722    ;
+  1547 00000980 B8723E                          mov ax, 0x3E72  ; 'r' in yellow on CYAN
+  1548 00000983 AB                              stosw
+  1549 00000984 B029                            mov al, 0x29    ; ')'
+  1550 00000986 AB                              stosw
+  1551 00000987 B020                            mov al, 0x20    ; ' ' (space)
+  1552 00000989 AB                              stosw
+  1553 0000098A B052                            mov al, 0x52    ; 'R'
+  1554 0000098C AB                              stosw
+  1555 0000098D B065                            mov al, 0x65    ; 'e'
+  1556 0000098F AB                              stosw
+  1557 00000990 B073                            mov al, 0x73    ; 's'
+  1558 00000992 AB                              stosw
+  1559 00000993 B075                            mov al, 0x75    ; 'u'
+  1560 00000995 AB                              stosw
+  1561 00000996 B06D                            mov al, 0x6D    ; 'm'
+  1562 00000998 AB                              stosw
+  1563 00000999 B065                            mov al, 0x65    ; 'e'
+  1564 0000099B AB                              stosw
+  1565 0000099C B020                            mov al, 0x20    ; ' ' (space)
+  1566 0000099E AB                              stosw
+  1567 0000099F B047                            mov al, 0x47    ; 'G'
+  1568 000009A1 AB                              stosw
+  1569 000009A2 B061                            mov al, 0x61    ; 'a'
+  1570 000009A4 AB                              stosw
+  1571 000009A5 B06D                            mov al, 0x6D    ; 'm'
+  1572 000009A7 AB                              stosw
+  1573 000009A8 B065                            mov al, 0x65    ; 'e'
+  1574 000009AA AB                              stosw
+  1575                                  	
+  1576                                  
+  1577                                  	   ; “u) Restart Game” (yellow on cyan)
+  1578 000009AB BFC007                      mov di, 0x07C0    ; 
+  1579                                  
+  1580 000009AE B8753E                      mov ax, 0x3E75    ; 'u' in yellow on cyan
+  1581 000009B1 AB                          stosw
+  1582 000009B2 B029                        mov al, 0x29      ; ')'
+  1583 000009B4 AB                          stosw
+  1584 000009B5 B020                        mov al, 0x20      ; ' '
+  1585 000009B7 AB                          stosw
+  1586 000009B8 B052                        mov al, 0x52      ; 'R'
+  1587 000009BA AB                          stosw
+  1588 000009BB B065                        mov al, 0x65      ; 'e'
+  1589 000009BD AB                          stosw
+  1590 000009BE B073                        mov al, 0x73      ; 's'
+  1591 000009C0 AB                          stosw
+  1592 000009C1 B074                        mov al, 0x74      ; 't'
+  1593 000009C3 AB                          stosw
+  1594 000009C4 B061                        mov al, 0x61      ; 'a'
+  1595 000009C6 AB                          stosw
+  1596 000009C7 B072                        mov al, 0x72      ; 'r'
+  1597 000009C9 AB                          stosw
+  1598 000009CA B074                        mov al, 0x74      ; 't'
+  1599 000009CC AB                          stosw
+  1600 000009CD B020                        mov al, 0x20      ; ' '
+  1601 000009CF AB                          stosw
+  1602 000009D0 B047                        mov al, 0x47      ; 'G'
+  1603 000009D2 AB                          stosw
+  1604 000009D3 B061                        mov al, 0x61      ; 'a'
+  1605 000009D5 AB                          stosw
+  1606 000009D6 B06D                        mov al, 0x6D      ; 'm'
+  1607 000009D8 AB                          stosw
+  1608 000009D9 B065                        mov al, 0x65      ; 'e'
+  1609 000009DB AB                          stosw
+  1610 000009DC BF6008                          mov di, 0x0860 ; Row 17, Col 16
+  1611 000009DF B8713E                          mov ax, 0x3E71  ; 'q' in yellow on CYAN
+  1612 000009E2 AB                              stosw
+  1613 000009E3 B029                            mov al, 0x29    ; ')'
+  1614 000009E5 AB                              stosw
+  1615 000009E6 B020                            mov al, 0x20    ; ' ' (space)
+  1616 000009E8 AB                              stosw
+  1617 000009E9 B051                            mov al, 0x51    ; 'Q'
+  1618 000009EB AB                              stosw
+  1619 000009EC B075                            mov al, 0x75    ; 'u'
+  1620 000009EE AB                              stosw
+  1621 000009EF B069                            mov al, 0x69    ; 'i'
+  1622 000009F1 AB                              stosw
+  1623 000009F2 B074                            mov al, 0x74    ; 't'
+  1624 000009F4 AB                              stosw
+  1625 000009F5 B020                            mov al, 0x20    ; ' ' (space)
+  1626 000009F7 AB                              stosw
+  1627 000009F8 B074                            mov al, 0x74    ; 't'
+  1628 000009FA AB                              stosw
+  1629 000009FB B06F                            mov al, 0x6F    ; 'o'
+  1630 000009FD AB                              stosw
+  1631 000009FE B020                            mov al, 0x20    ; ' ' (space)
+  1632 00000A00 AB                              stosw
+  1633 00000A01 B04D                            mov al, 0x4D    ; 'M'
+  1634 00000A03 AB                              stosw
+  1635 00000A04 B065                            mov al, 0x65    ; 'e'
+  1636 00000A06 AB                              stosw
+  1637 00000A07 B06E                            mov al, 0x6E    ; 'n'
+  1638 00000A09 AB                              stosw
+  1639 00000A0A B075                            mov al, 0x75    ; 'u'
+  1640 00000A0C AB                              stosw
+  1641                                          
+  1642 00000A0D C3                              ret
+  1643                                  
+  1644                                  clear_pause_menu:
+  1645 00000A0E B95000                          mov cx, 80      ; Number of characters (words) to clear per line
+  1646 00000A11 B82030                          mov ax, 0x3020  ; Space character with light cyan background (0x30)
+  1647                                  
+  1648                                        
+  1649                                         ; Clear row 10 (GAME PAUSED was at 0x05E4)
+  1650 00000A14 BFA005                      mov di, 0x05A0  ; Start clearing from the beginning of the row
+  1651 00000A17 51                          push cx
+  1652 00000A18 F3AB                        rep stosw       ; Clear row 10
+  1653 00000A1A 59                          pop cx
+  1654                                  
+  1655                                      ; Clear row 12 (r) Resume Game was at 0x0720)
+  1656 00000A1B BFE006                      mov di, 0x06E0  ; Start clearing from the beginning of the row
+  1657 00000A1E 51                          push cx
+  1658 00000A1F F3AB                        rep stosw       ; Clear row 12
+  1659 00000A21 59                          pop cx
+  1660                                      
+  1661                                      ; --- ADD THIS LINE TO CLEAR THE NEW RESTART OPTION ON ROW 13 ---
+  1662                                      ; Clear row 13 (u) Restart Game is at 0x0800)
+  1663 00000A22 BF8007                      mov di, 0x0780  ; Start clearing from the beginning of the row
+  1664 00000A25 51                          push cx
+  1665 00000A26 F3AB                        rep stosw       ; Clear row 13
+  1666 00000A28 59                          pop cx
+  1667                                      ; --- END ADDITION ---
+  1668                                  
+  1669                                      ; Clear row 15 (q) Quit to Menu is now at 0x08FC)
+  1670 00000A29 BF6008                      mov di, 0x0860; Start clearing from the beginning of the row
+  1671 00000A2C B95000                      mov cx, 80      ; Make sure CX is 80 for the last rep stosw
+  1672 00000A2F F3AB                        rep stosw       ; Clear row 15
+  1673                                      
+  1674 00000A31 C3                          ret
+  1675                                  restart_from_pause:
+  1676                                      ; Clear the pause menu text from the screen first
+  1677 00000A32 E8D9FF                      call clear_pause_menu
+  1678                                      
+  1679                                      ; Ensure the paused flag is reset (important before restarting)
+  1680 00000A35 C606B20F00                  mov byte [paused], 0
+  1681                                      
+  1682                                      ; Jump back to the main game initialization point (where scores, pipes, bird are reset)
+  1683 00000A3A E941FC                      jmp fb21
+  1684                                  fb4:    ; Bird flap logic (when space or other non-handled key is pressed)
+  1685 00000A3D A1A80F                          mov ax,[bird]
+  1686 00000A40 2D1000                          sub ax,0x10                 ; Move bird up (decrease row value by 2, as 0x08 is one row)
+  1687 00000A43 3D0800                          cmp ax,0x08                 ; Check if bird hits top (row 1)
+  1688 00000A46 7203                            jb fb18                     ; If below top, don't let it go higher
+  1689 00000A48 A3A80F                          mov [bird],ax               ; Update bird's new higher position
+  1690 00000A4B C606A40F00              fb18:   mov byte [grav],0  ; Reset gravity
+  1691                                          
+  1692                                          ; Super dynamic Flappy Bird-style wing flapping sound! (Cooler Version - Attempt 2)
+  1693 00000A50 B0B6                            mov al,0xb6        ; Command byte: Select channel 2, mode 3 (square wave)
+  1694 00000A52 E643                            out (0x43),al      ; Write to PIT command register
+  1695                                          
+  1696                                          ; Turn on the speaker
+  1697 00000A54 E461                            in al,(0x61)       ; Read current value of port 0x61
+  1698 00000A56 0C03                            or al,0x03         ; Set bits 0 and 1 to enable speaker
+  1699 00000A58 E661                            out (0x61),al      ; Write back
+  1700                                          
+  1701                                          ; *** PHASE 1: VERY HIGH, VERY SHORT "TICK" or start of a "ZAP" (~4000 Hz) ***
+  1702 00000A5A B0B6                            mov al,0xb6        ; Command byte: Select channel 2, mode 3 (square wave)
+  1703 00000A5C E643                            out (0x43),al      ; Write to PIT command register
+  1704                                          ; 1193180 / 4000 = 298 (0x012A)
+  1705 00000A5E B82A01                          mov ax,0x012A      ; Frequency divisor for ~4000 Hz (Very high!)
+  1706 00000A61 E642                            out (0x42),al      ; Send low byte
+  1707 00000A63 88E0                            mov al,ah          ; Move high byte to AL
+  1708 00000A65 E642                            out (0x42),al      ; Send high byte
+  1709                                          
+  1710                                          ; Extremely brief for a sharp attack
+  1711 00000A67 B90100                          mov cx,1
+  1712                                  fb18_whoosh:
+  1713 00000A6A 51                              push cx
+  1714 00000A6B B90500                          mov cx,5           ; EXTREMELY short "tick" (Original: 20)
+  1715                                  fb18_inner_whoosh:
+  1716 00000A6E E2FE                            loop fb18_inner_whoosh
+  1717 00000A70 59                              pop cx
+  1718 00000A71 E2F7                            loop fb18_whoosh
+  1719                                          
+  1720                                          ; *** PHASE 2: RAPID DROP to a MID-frequency (~1200 Hz) ***
+  1721 00000A73 B0B6                            mov al,0xb6
+  1722 00000A75 E643                            out (0x43),al
+  1723                                          ; 1193180 / 1200 = 994 (0x03E2)
+  1724 00000A77 B8E203                          mov ax,0x03E2      ; Frequency divisor for ~1200 Hz (Quick drop)
+  1725 00000A7A E642                            out (0x42),al
+  1726 00000A7C 88E0                            mov al,ah
+  1727 00000A7E E642                            out (0x42),al
+  1728                                          
+  1729                                          ; Very short to make the frequency drop feel fast
+  1730 00000A80 B90100                          mov cx,1
+  1731                                  fb18_swoop:
+  1732 00000A83 51                              push cx
+  1733 00000A84 B90800                          mov cx,8           ; Very short for quick transition (Original: 15)
+  1734                                  fb18_inner_swoop:
+  1735 00000A87 E2FE                            loop fb18_inner_swoop
+  1736 00000A89 59                              pop cx
+  1737 00000A8A E2F7                            loop fb18_swoop
+  1738                                          
+  1739                                          ; *** PHASE 3: Main "FLAP" BODY tone, mid-low (~700 Hz) ***
+  1740 00000A8C B0B6                            mov al,0xb6
+  1741 00000A8E E643                            out (0x43),al
+  1742                                          ; 1193180 / 700 = 1704 (0x06A8)
+  1743 00000A90 B8A806                          mov ax,0x06A8      ; Frequency divisor for ~700 Hz (The main "body" of the flap)
+  1744 00000A93 E642                            out (0x42),al
+  1745 00000A95 88E0                            mov al,ah
+  1746 00000A97 E642                            out (0x42),al
+  1747                                          
+  1748                                          ; This is the main audible part of the "flap"
+  1749 00000A99 B90100                          mov cx,1
+  1750                                  fb18_mid:
+  1751 00000A9C 51                              push cx
+  1752 00000A9D B92300                          mov cx,35          ; Main flap duration (Original: 25)
+  1753                                  fb18_inner_mid:
+  1754 00000AA0 E2FE                            loop fb18_inner_mid
+  1755 00000AA2 59                              pop cx
+  1756 00000AA3 E2F7                            loop fb18_mid
+  1757                                          
+  1758                                          ; *** PHASE 4: Distinct LOW "THUD" or impact (~300 Hz) ***
+  1759 00000AA5 B0B6                            mov al,0xb6
+  1760 00000AA7 E643                            out (0x43),al
+  1761                                          ; 1193180 / 300 = 3977 (0x0F89)
+  1762 00000AA9 B8890F                          mov ax,0x0F89      ; Frequency divisor for ~300 Hz (Low thud)
+  1763 00000AAC E642                            out (0x42),al
+  1764 00000AAE 88E0                            mov al,ah
+  1765 00000AB0 E642                            out (0x42),al
+  1766                                          
+  1767                                          ; Noticeable thud, but not too long
+  1768 00000AB2 B90100                          mov cx,1           ; Outer loop count for this phase (Original was cx,2)
+  1769                                  fb18_pop:
+  1770 00000AB5 51                              push cx
+  1771 00000AB6 B91900                          mov cx,25          ; Thud duration (Original: 55)
+  1772                                  fb18_inner_pop:
+  1773 00000AB9 E2FE                            loop fb18_inner_pop
+  1774 00000ABB 59                              pop cx
+  1775 00000ABC E2F7                            loop fb18_pop
+  1776                                          
+  1777                                          ; *** PHASE 5: VERY SHORT, LOW "FADE" or end (~150 Hz) ***
+  1778 00000ABE B0B6                            mov al,0xb6
+  1779 00000AC0 E643                            out (0x43),al
+  1780                                          ; 1193180 / 150 = 7954 (0x1F12)
+  1781 00000AC2 B8121F                          mov ax,0x1F12      ; Frequency divisor for ~150 Hz (Very low, quick end)
+  1782 00000AC5 E642                            out (0x42),al
+  1783 00000AC7 88E0                            mov al,ah
+  1784 00000AC9 E642                            out (0x42),al
+  1785                                          
+  1786                                          ; Extremely brief final sound
+  1787 00000ACB B90100                          mov cx,1
+  1788                                  fb18_fade:
+  1789 00000ACE 51                              push cx
+  1790 00000ACF B90700                          mov cx,7           ; Super short fade (Original: 30)
+  1791                                  fb18_inner_fade:
+  1792 00000AD2 E2FE                            loop fb18_inner_fade
+  1793 00000AD4 59                              pop cx
+  1794 00000AD5 E2F7                            loop fb18_fade
+  1795                                          
+  1796                                          ; Turn off the speaker
+  1797 00000AD7 E461                            in al,(0x61)       ; Read port again
+  1798 00000AD9 24FC                            and al,0xfc        ; Clear bits 0 and 1 to disable speaker
+  1799 00000ADB E661                            out (0x61),al      ; Turn off sound
+  1800                                          
+  1801                                          ; Continue to main loop
+  1802 00000ADD E91EFC                  fb26:   jmp near fb12               ; Jump back to the start of the main game loop (as per your original)
+  1803                                  
+  1804                                  game_over_check_extra_life:
+  1805 00000AE0 803EAF0F01                      cmp byte [extra_life_available], 1
+  1806 00000AE5 7537                            jne display_oops_and_real_game_over 
+  1807                                  
+  1808 00000AE7 C606AF0F00                      mov byte [extra_life_available], 0 
+  1809 00000AEC E8EE01                          call display_extra_life_prompt_sub 
+  1810                                  
+  1811                                  read_extra_life_input_loop:
+  1812 00000AEF B400                            mov ah, 00h     
+  1813 00000AF1 CD16                            int 0x16
+  1814 00000AF3 3C31                            cmp al, '1'
+  1815 00000AF5 7406                            je handle_use_extra_life
+  1816 00000AF7 3C32                            cmp al, '2'
+  1817 00000AF9 7420                            je handle_give_up_extra_life
+  1818 00000AFB EBF2                            jmp read_extra_life_input_loop
+  1819                                          
+  1820                                  handle_use_extra_life:
+  1821 00000AFD E88C02                          call clear_extra_life_prompt_sub ; Clear the prompt text from screen
+  1822                                  
+  1823 00000B00 8B3EB00F                        mov di, [saved_crash_di]    ; Get DI where bird crashed
+  1824 00000B04 26C60520                        mov byte [es:di], ' '       ; Erase '*' crash marker (char part)
+  1825 00000B08 26C6450220                      mov byte [es:di+2], ' '     ; Erase second '*' crash marker (char part)
+  1826                                                                      ; Attributes at [di+1], [di+3] remain (background color)
+  1827                                          
+  1828 00000B0D C606A80F60                      mov byte [bird], 0x60       ; Reset bird's logical Y position to a safe mid-value
+  1829 00000B12 C706A40F0000                    mov word [grav], 0          ; Reset gravity, so bird doesn't instantly plummet
+  1830 00000B18 E9E3FB                          jmp fb12                    ; Resume main game loop
+  1831                                  
+  1832                                  handle_give_up_extra_life:
+  1833 00000B1B E86E02                          call clear_extra_life_prompt_sub ; Clear the prompt text
+  1834                                          ; Fall through to display_oops_and_real_game_over
+  1835                                          ; The '*' crash markers are already on screen from before the prompt.
+  1836                                  
+  1837                                  display_oops_and_real_game_over:
+  1838                                          ; Display "OOPS!" message
+  1839 00000B1E BFCA37                          mov di,0x37CA           ; Position for "OOPS!"
+  1840 00000B21 BF2407                          mov di, 0x0724          ; Centered-ish for "OOPS!"
+  1841 00000B24 B84F3C                          mov ax,0x3c4f           ; 'O' in Red (attribute 0x0C)
+  1842 00000B27 AB                              stosw
+  1843 00000B28 B04F                            mov al,0x4f             ; 'O' (AH still 0x0C)
+  1844 00000B2A AB                              stosw
+  1845 00000B2B B050                            mov al,0x50             ; 'P'
+  1846 00000B2D AB                              stosw
+  1847 00000B2E B053                            mov al,0x53             ; 'S'
+  1848 00000B30 AB                              stosw
+  1849 00000B31 B021                            mov al,0x21             ; '!'
+  1850 00000B33 AB                              stosw
+  1851                                  
+  1852 00000B34 B95000                          mov cx,80               ; Wait up to 80 frames
+  1853                                  oops_delay_loop:
+  1854                                          ; Check for key press (non-blocking)
+  1855 00000B37 B401                            mov ah, 01h
+  1856 00000B39 CD16                            int 16h
+  1857 00000B3B 7507                            jnz skip_oops_delay     ; If a key was pressed, skip the delay
+  1858                                  
+  1859                                          ; Otherwise, wait a frame
+  1860 00000B3D 51                              push cx
+  1861 00000B3E E8F602                          call wait_frame 
+  1862 00000B41 59                              pop cx
+  1863 00000B42 E2F3                            loop oops_delay_loop
+  1864                                  skip_oops_delay:
+  1865                                  
+  1866 00000B44 E82B03                          call clear_screen       ; Clear screen
+  1867                                          
+  1868                                          
+  1869 00000B47 A1A20F                          mov ax, [score]         ; Get current score
+  1870 00000B4A 3B06[A60F]                      cmp ax, [high_score]    ; Compare with high score
+  1871 00000B4E 7E03                            jle .skip_high_score_update ; If score <= high_score, skip update
+  1872                                  
+  1873 00000B50 A3[A60F]                        mov [high_score], ax    ; If score > high_score, update high_score
+  1874                                          .skip_high_score_update:
+  1875                                          ; Now proceed to game over menu
+  1876 00000B53 E90000                          jmp game_over_menu      ; Go to "Try again? Yes/No" menu
+  1877                                  
+  1878                                  game_over_menu: 
+  1879 00000B56 BFE405                          mov di, 0x05E4 ; Row 11, Col 34
+  1880 00000B59 B84734                          mov ax, 0x3447  ; 'G' in Red on CYAN
+  1881 00000B5C AB                              stosw
+  1882 00000B5D B041                            mov al, 0x41    ; 'A'
+  1883 00000B5F AB                              stosw
+  1884 00000B60 B04D                            mov al, 0x4d    ; 'M'
+  1885 00000B62 AB                              stosw
+  1886 00000B63 B045                            mov al, 0x45    ; 'E'
+  1887 00000B65 AB                              stosw
+  1888 00000B66 B020                            mov al, 0x20    ; ' ' (space)
+  1889 00000B68 AB                              stosw
+  1890 00000B69 B04F                            mov al, 0x4f    ; 'O'
+  1891 00000B6B AB                              stosw
+  1892 00000B6C B056                            mov al, 0x56    ; 'V'
+  1893 00000B6E AB                              stosw
+  1894 00000B6F B045                            mov al, 0x45    ; 'E'
+  1895 00000B71 AB                              stosw
+  1896 00000B72 B052                            mov al, 0x52    ; 'R'
+  1897 00000B74 AB                              stosw
+  1898 00000B75 B021                            mov al, 0x21    ; '!'
+  1899 00000B77 AB                              stosw
+  1900                                  	;; <<< START: ADD CODE TO DISPLAY YOUR SCORE LABEL >>>
+  1901 00000B78 BFC207                          mov di, 0x07C2          ; Set DI to Row 13 (index 12), Col 34 (index 33)
+  1902 00000B7B B43E                            mov ah, 0x3e            ; Set attribute to Yellow on Cyan (0x3E)
+  1903 00000B7D B059                            mov al, 'Y'             ; Write "Your Score: "
+  1904 00000B7F AB                              stosw
+  1905 00000B80 B06F                            mov al, 'o'
+  1906 00000B82 AB                              stosw
+  1907 00000B83 B075                            mov al, 'u'
+  1908 00000B85 AB                              stosw
+  1909 00000B86 B072                            mov al, 'r'
+  1910 00000B88 AB                              stosw
+  1911 00000B89 B020                            mov al, ' '
+  1912 00000B8B AB                              stosw
+  1913 00000B8C B053                            mov al, 'S'
+  1914 00000B8E AB                              stosw
+  1915 00000B8F B063                            mov al, 'c'
+  1916 00000B91 AB                              stosw
+  1917 00000B92 B06F                            mov al, 'o'
+  1918 00000B94 AB                              stosw
+  1919 00000B95 B072                            mov al, 'r'
+  1920 00000B97 AB                              stosw
+  1921 00000B98 B065                            mov al, 'e'
+  1922 00000B9A AB                              stosw
+  1923 00000B9B B03A                            mov al, ':'
+  1924 00000B9D AB                              stosw
+  1925 00000B9E B020                            mov al, ' '             ; Space before the number
+  1926 00000BA0 AB                              stosw                   ; After this, DI points where the *first character after the space* would go.
+  1927                                                                  ; This is the position for the *rightmost* digit if we print right-to-left.
+  1928 00000BA1 A1A20F                  	   mov ax, [score]         ; Load the player's score value into AX.
+  1929                                                                  ; The 'score' variable is defined later using EQU or DB/DW/DD.
+  1930                                                                  ; From your code, it's equ 0x0fa2.
+  1931 00000BA4 BB0A00                          mov bx, 10              ; Set BX to 10, because we are converting to base 10 (decimal).
+  1932 00000BA7 31C9                            xor cx, cx              ; Clear CX. We will use CX to count how many digits we get.
+  1933                                  
+  1934                                      .yourscore_push_digits:
+  1935 00000BA9 31D2                            xor dx, dx              ; Clear the DX register. The DIV instruction divides DX:AX by BX.
+  1936                                                                  ; Since AX holds our number and DX is 0, it just divides AX by BX.
+  1937 00000BAB F7F3                            div bx                  ; Divide AX by BX (which is 10).
+  1938                                                                  ; Result: The quotient (AX / 10) goes into AX.
+  1939                                                                  ;         The remainder (AX % 10, which is the digit 0-9) goes into DX.
+  1940 00000BAD 52                              push dx                 ; Push the remainder (the digit) onto the stack.
+  1941 00000BAE 41                              inc cx                  ; Increment the digit counter (we found one digit).
+  1942 00000BAF 09C0                            or ax, ax               ; Check if the quotient (the new value in AX) is zero.
+  1943 00000BB1 75F6                            jnz .yourscore_push_digits ; If AX is not zero, there are more digits left, so loop back and divide again.
+  1944                                  
+  1945                                      ; --- Handle the case where the score is 0 ---
+  1946                                      ; If the score was initially 0, the loop above won't run, and CX will still be 0.
+  1947                                      ; We need to display '0' in this case.
+  1948 00000BB3 81F90000                    cmp cx, 0
+  1949 00000BB7 7506                        jnz .yourscore_pop_and_display ; If CX is not 0, we have digits to display, jump ahead.
+  1950                                      ; If CX *is* 0:
+  1951 00000BB9 B90100                      mov cx, 1 ; Set CX to 1 so the display loop runs once.
+  1952 00000BBC 31D2                        xor dx, dx ; Set DX to 0 (representing the digit 0).
+  1953 00000BBE 52                          push dx ; Push 0 onto the stack.
+  1954                                      ; Fall through to .yourscore_pop_and_display
+  1955                                  
+  1956                                      ; --- Pop Digits from Stack and Display ---
+  1957                                      ; The digits are now on the stack from rightmost to leftmost (e.g., for 123, stack has 3, then 2, then 1).
+  1958                                      ; Popping gets them in the correct order (1, then 2, then 3).
+  1959                                      .yourscore_pop_and_display:
+  1960 00000BBF 58                              pop ax                  ; Pop the digit from the stack into AX (it will be in AL).
+  1961                                                                  ; The value is 0-9 because it was a remainder from DIV.
+  1962 00000BC0 0430                            add al, '0'             ; Convert the numerical digit (0-9) into its ASCII character ('0'-'9').
+  1963                                                                  ; ASCII '0' is 48, '1' is 49, etc. Adding '0' (48) does this conversion.
+  1964 00000BC2 B43E                            mov ah, 0x3e            ; Set the attribute byte for the character. 0x3E means Yellow foreground on Cyan background.
+  1965 00000BC4 FD                              std                     ; Set the Direction Flag. This makes the STOSW instruction *decrement* the DI register
+  1966                                                                  ; after writing the word, instead of incrementing it. We want to write from right to left.
+  1967 00000BC5 AB                              stosw                   ; Store the AX word (character and attribute) at ES:DI.
+  1968                                                                  ; Since DI was pointing after the space, the first STOSW writes to DI-2.
+  1969                                                                  ; DI is then automatically decremented by 2 (because STOSW writes a word, 2 bytes).
+  1970 00000BC6 FC                              cld                     ; Clear the Direction Flag immediately. This returns DI incrementing behavior
+  1971                                                                  ; to normal for any other instructions that might use STOSW, STOSB, MOVSW, MOVSB, etc.
+  1972 00000BC7 E2F6                            loop .yourscore_pop_and_display ; Decrement CX and loop back if CX is not zero.
+  1973                                  
+  1974                                  ; Display "High Score:"
+  1975                                          ; Target DI = 0x0544 (Row 9, Col 35)
+  1976 00000BC9 BF4405                          mov di, 0x0544
+  1977 00000BCC B43E                            mov ah, 0x3e            ; Yellow on Cyan attribute
+  1978 00000BCE B048                            mov al, 'H'             ; "High Score: " (Length 12)
+  1979 00000BD0 AB                              stosw
+  1980 00000BD1 B069                            mov al, 'i'
+  1981 00000BD3 AB                              stosw
+  1982 00000BD4 B067                            mov al, 'g'
+  1983 00000BD6 AB                              stosw
+  1984 00000BD7 B068                            mov al, 'h'
+  1985 00000BD9 AB                              stosw
+  1986 00000BDA B020                            mov al, ' '
+  1987 00000BDC AB                              stosw
+  1988 00000BDD B053                            mov al, 'S'
+  1989 00000BDF AB                              stosw
+  1990 00000BE0 B063                            mov al, 'c'
+  1991 00000BE2 AB                              stosw
+  1992 00000BE3 B06F                            mov al, 'o'
+  1993 00000BE5 AB                              stosw
+  1994 00000BE6 B072                            mov al, 'r'
+  1995 00000BE8 AB                              stosw
+  1996 00000BE9 B065                            mov al, 'e'
+  1997 00000BEB AB                              stosw
+  1998 00000BEC B03A                            mov al, ':'
+  1999 00000BEE AB                              stosw
+  2000 00000BEF B020                            mov al, ' '
+  2001 00000BF1 AB                              stosw
+  2002                                  
+  2003                                          ; Convert and display the high score number (adapt from show_current_score)
+  2004 00000BF2 A1[A60F]                        mov ax, [high_score]
+  2005 00000BF5 BB0A00                          mov bx, 10      ; Divisor
+  2006 00000BF8 31C9                            xor cx, cx      ; Digit counter
+  2007                                          
+  2008                                          .highscore_push_digits:
+  2009 00000BFA 31D2                                xor dx, dx      ; Clear high word for division
+  2010 00000BFC F7F3                                div bx          ; AX = AX/10, DX = remainder
+  2011 00000BFE 52                                  push dx         ; Save digit
+  2012 00000BFF 41                                  inc cx          ; Count digits
+  2013 00000C00 09C0                                or ax, ax       ; Check if quotient is 0
+  2014 00000C02 75F6                                jnz .highscore_push_digits ; If not, continue
+  2015                                  
+  2016                                          ; Handle case where high score is 0 (display '0')
+  2017 00000C04 81F90000                        cmp cx, 0
+  2018 00000C08 7506                            jnz .highscore_pop_and_display
+  2019 00000C0A B90100                          mov cx, 1 ; If count is 0, push 0 to display '0'
+  2020 00000C0D 31D2                            xor dx, dx
+  2021 00000C0F 52                              push dx
+  2022                                              
+  2023                                          .highscore_pop_and_display:
+  2024 00000C10 58                                  pop ax          ; Get digit (0-9)
+  2025 00000C11 0430                                add al, '0'     ; Convert to ASCII ('0'-'9')
+  2026 00000C13 B43E                                mov ah, 0x3e    ; Yellow attribute (match label)
+  2027 00000C15 AB                                  stosw           ; Write digit character and attribute
+  2028 00000C16 E2F8                                loop .highscore_pop_and_display
+  2029                                  
+  2030 00000C18 BFD408                          mov di, 0x08D4 ; Row 15, Col 10  ;; <<< CHANGE THIS LINE >>>
+  2031                                  
+  2032 00000C1B B8573E                          mov ax, 0x3e57  ; 'W' in Yellow on CYAN
+  2033 00000C1E AB                              stosw
+  2034 00000C1F B06F                            mov al, 0x6f    ; 'o'
+  2035 00000C21 AB                              stosw
+  2036 00000C22 B075                            mov al, 0x75    ; 'u'
+  2037 00000C24 AB                              stosw
+  2038 00000C25 B06C                            mov al, 0x6c    ; 'l'
+  2039 00000C27 AB                              stosw
+  2040 00000C28 B064                            mov al, 0x64    ; 'd'
+  2041 00000C2A AB                              stosw
+  2042 00000C2B B020                            mov al, 0x20    ; ' '
+  2043 00000C2D AB                              stosw
+  2044 00000C2E B079                            mov al, 0x79    ; 'y'
+  2045 00000C30 AB                              stosw
+  2046 00000C31 B06F                            mov al, 0x6f    ; 'o'
+  2047 00000C33 AB                              stosw
+  2048 00000C34 B075                            mov al, 0x75    ; 'u'
+  2049 00000C36 AB                              stosw
+  2050 00000C37 B020                            mov al, 0x20    ; ' '
+  2051 00000C39 AB                              stosw
+  2052 00000C3A B06C                            mov al, 0x6c    ; 'l'
+  2053 00000C3C AB                              stosw
+  2054 00000C3D B069                            mov al, 0x69    ; 'i'
+  2055 00000C3F AB                              stosw
+  2056 00000C40 B06B                            mov al, 0x6b    ; 'k'
+  2057 00000C42 AB                              stosw
+  2058 00000C43 B065                            mov al, 0x65    ; 'e'
+  2059 00000C45 AB                              stosw
+  2060 00000C46 B020                            mov al, 0x20    ; ' '
+  2061 00000C48 AB                              stosw
+  2062 00000C49 B074                            mov al, 0x74    ; 't'
+  2063 00000C4B AB                              stosw
+  2064 00000C4C B06F                            mov al, 0x6f    ; 'o'
+  2065 00000C4E AB                              stosw
+  2066 00000C4F B020                            mov al, 0x20    ; ' '
+  2067 00000C51 AB                              stosw
+  2068 00000C52 B074                            mov al, 0x74    ; 't'
+  2069 00000C54 AB                              stosw
+  2070 00000C55 B072                            mov al, 0x72    ; 'r'
+  2071 00000C57 AB                              stosw
+  2072 00000C58 B079                            mov al, 0x79    ; 'y'
+  2073 00000C5A AB                              stosw
+  2074 00000C5B B020                            mov al, 0x20    ; ' '
+  2075 00000C5D AB                              stosw
+  2076 00000C5E B061                            mov al, 0x61    ; 'a'
+  2077 00000C60 AB                              stosw
+  2078 00000C61 B067                            mov al, 0x67    ; 'g'
+  2079 00000C63 AB                              stosw
+  2080 00000C64 B061                            mov al, 0x61    ; 'a'
+  2081 00000C66 AB                              stosw
+  2082 00000C67 B069                            mov al, 0x69    ; 'i'
+  2083 00000C69 AB                              stosw
+  2084 00000C6A B06E                            mov al, 0x6e    ; 'n'
+  2085 00000C6C AB                              stosw
+  2086 00000C6D B03F                            mov al, 0x3f    ; '?'
+  2087 00000C6F AB                              stosw
+  2088                                  
+  2089 00000C70 BFC80A                          mov di, 0x0AC8 ; Row 18, Col 20  ;; <<< CHANGE THIS LINE >>>
+  2090                                  
+  2091 00000C73 B8313E                          mov ax, 0x3e31  ; '1' in Yellow on CYAN
+  2092 00000C76 AB                              stosw
+  2093 00000C77 B029                            mov al, 0x29    ; ')'
+  2094 00000C79 AB                              stosw
+  2095 00000C7A B020                            mov al, 0x20    ; ' '
+  2096 00000C7C AB                              stosw
+  2097 00000C7D B059                            mov al, 0x59    ; 'Y'
+  2098 00000C7F AB                              stosw
+  2099 00000C80 B065                            mov al, 0x65    ; 'e'
+  2100 00000C82 AB                              stosw
+  2101 00000C83 B073                            mov al, 0x73    ; 's'
+  2102 00000C85 AB                              stosw
+  2103                                  
+  2104 00000C86 BF680B                           mov di, 0x0B68 ; Row 19, Col 20  ;; <<< CHANGE THIS LINE >>>
+  2105 00000C89 B8323E                          mov ax, 0x3e32  ; '2' in Yellow on CYAN
+  2106 00000C8C AB                              stosw
+  2107 00000C8D B029                            mov al, 0x29    ; ')'
+  2108 00000C8F AB                              stosw
+  2109 00000C90 B020                            mov al, 0x20    ; ' '
+  2110 00000C92 AB                              stosw
+  2111 00000C93 B04E                            mov al, 0x4e    ; 'N'
+  2112 00000C95 AB                              stosw
+  2113 00000C96 B06F                            mov al, 0x6f    ; 'o'
+  2114 00000C98 AB                              stosw
+  2115 00000C99 B02C                            mov al, 0x2c    ; ','
+  2116 00000C9B AB                              stosw
+  2117 00000C9C B020                            mov al, 0x20    ; ' '
+  2118 00000C9E AB                              stosw
+  2119 00000C9F B062                            mov al, 0x62    ; 'b'
+  2120 00000CA1 AB                              stosw
+  2121 00000CA2 B061                            mov al, 0x61    ; 'a'
+  2122 00000CA4 AB                              stosw
+  2123 00000CA5 B063                            mov al, 0x63    ; 'c'
+  2124 00000CA7 AB                              stosw
+  2125 00000CA8 B06B                            mov al, 0x6b    ; 'k'
+  2126 00000CAA AB                              stosw
+  2127 00000CAB B020                            mov al, 0x20    ; ' '
+  2128 00000CAD AB                              stosw
+  2129 00000CAE B074                            mov al, 0x74    ; 't'
+  2130 00000CB0 AB                              stosw
+  2131 00000CB1 B06F                            mov al, 0x6f    ; 'o'
+  2132 00000CB3 AB                              stosw
+  2133 00000CB4 B020                            mov al, 0x20    ; ' '
+  2134 00000CB6 AB                              stosw
+  2135 00000CB7 B06D                            mov al, 0x6d    ; 'm'
+  2136 00000CB9 AB                              stosw
+  2137 00000CBA B065                            mov al, 0x65    ; 'e'
+  2138 00000CBC AB                              stosw
+  2139 00000CBD B06E                            mov al, 0x6e    ; 'n'
+  2140 00000CBF AB                              stosw
+  2141 00000CC0 B075                            mov al, 0x75    ; 'u'
+  2142 00000CC2 AB                              stosw
+  2143                                  
+  2144                                  game_over_read_input:
+  2145 00000CC3 30C0                            xor al, al
+  2146 00000CC5 B400                            mov ah, 00h     ; Wait for key press
+  2147 00000CC7 CD16                            int 0x16        
+  2148 00000CC9 3C1B                    	cmp al, 0x1b    ; Is the pressed key Escape?
+  2149 00000CCB 0F84D902                        je near exit_to_dos  ; If yes, jump to our common exit label
+  2150 00000CCF 3C31                            cmp al, '1'     ; '1' to play again?
+  2151 00000CD1 0F84A9F9                        je fb21         ; Jump to game start
+  2152                                  
+  2153 00000CD5 3C32                            cmp al, '2'     ; '2' to go to menu?
+  2154 00000CD7 0F8438F3                        je menu         ; Jump to main menu
+  2155                                  
+  2156 00000CDB EBE6                            jmp game_over_read_input ; Loop for valid input
+  2157                                  
+  2158                                  
+  2159                                  display_extra_life_prompt_sub:
+  2160 00000CDD BFCE05                          mov di, 0x05CE ; Row 11, Col 23
+  2161 00000CE0 B43E                            mov ah, 0x3E ; Yellow text on CYAN
+  2162 00000CE2 B044                            mov al, 'D'; stosw
+  2163 00000CE4 AB                              stosw
+  2164 00000CE5 B06F                            mov al, 'o'; stosw
+  2165 00000CE7 AB                              stosw
+  2166 00000CE8 B020                            mov al, ' '; stosw
+  2167 00000CEA AB                              stosw
+  2168 00000CEB B079                            mov al, 'y'; stosw
+  2169 00000CED AB                              stosw
+  2170 00000CEE B06F                            mov al, 'o'; stosw
+  2171 00000CF0 AB                              stosw
+  2172 00000CF1 B075                            mov al, 'u'; stosw
+  2173 00000CF3 AB                              stosw
+  2174 00000CF4 B020                            mov al, ' '; stosw
+  2175 00000CF6 AB                              stosw
+  2176 00000CF7 B077                            mov al, 'w'; stosw
+  2177 00000CF9 AB                              stosw
+  2178 00000CFA B061                            mov al, 'a'; stosw
+  2179 00000CFC AB                              stosw
+  2180 00000CFD B06E                            mov al, 'n'; stosw
+  2181 00000CFF AB                              stosw
+  2182 00000D00 B074                            mov al, 't'; stosw
+  2183 00000D02 AB                              stosw
+  2184 00000D03 B020                            mov al, ' '; stosw
+  2185 00000D05 AB                              stosw
+  2186 00000D06 B074                            mov al, 't'; stosw
+  2187 00000D08 AB                              stosw
+  2188 00000D09 B06F                            mov al, 'o'; stosw
+  2189 00000D0B AB                              stosw
+  2190 00000D0C B020                            mov al, ' '; stosw
+  2191 00000D0E AB                              stosw
+  2192 00000D0F B075                            mov al, 'u'; stosw
+  2193 00000D11 AB                              stosw
+  2194 00000D12 B073                            mov al, 's'; stosw
+  2195 00000D14 AB                              stosw
+  2196 00000D15 B065                            mov al, 'e'; stosw
+  2197 00000D17 AB                              stosw
+  2198 00000D18 B020                            mov al, ' '; stosw
+  2199 00000D1A AB                              stosw
+  2200 00000D1B B079                            mov al, 'y'; stosw
+  2201 00000D1D AB                              stosw
+  2202 00000D1E B06F                            mov al, 'o'; stosw
+  2203 00000D20 AB                              stosw
+  2204 00000D21 B075                            mov al, 'u'; stosw
+  2205 00000D23 AB                              stosw
+  2206 00000D24 B072                            mov al, 'r'; stosw
+  2207 00000D26 AB                              stosw
+  2208 00000D27 B020                            mov al, ' '; stosw
+  2209 00000D29 AB                              stosw
+  2210 00000D2A B065                            mov al, 'e'; stosw
+  2211 00000D2C AB                              stosw
+  2212 00000D2D B078                            mov al, 'x'; stosw
+  2213 00000D2F AB                              stosw
+  2214 00000D30 B074                            mov al, 't'; stosw
+  2215 00000D32 AB                              stosw
+  2216 00000D33 B072                            mov al, 'r'; stosw
+  2217 00000D35 AB                              stosw
+  2218 00000D36 B061                            mov al, 'a'; stosw
+  2219 00000D38 AB                              stosw
+  2220 00000D39 B020                            mov al, ' '; stosw
+  2221 00000D3B AB                              stosw
+  2222 00000D3C B06C                            mov al, 'l'; stosw
+  2223 00000D3E AB                              stosw
+  2224 00000D3F B069                            mov al, 'i'; stosw
+  2225 00000D41 AB                              stosw
+  2226 00000D42 B066                            mov al, 'f'; stosw
+  2227 00000D44 AB                              stosw
+  2228 00000D45 B065                            mov al, 'e'; stosw
+  2229 00000D47 AB                              stosw
+  2230 00000D48 B03F                            mov al, '?'; stosw
+  2231 00000D4A AB                              stosw
+  2232                                  
+  2233 00000D4B BF2807                          mov di, 0x0728 ; Row 14, Col 20
+  2234 00000D4E B43E                            mov ah, 0x3E ; Yellow text on CYAN
+  2235 00000D50 B05B                            mov al, '['; stosw
+  2236 00000D52 AB                              stosw
+  2237 00000D53 B031                            mov al, '1'; stosw
+  2238 00000D55 AB                              stosw
+  2239 00000D56 B05D                            mov al, ']'; stosw
+  2240 00000D58 AB                              stosw
+  2241 00000D59 B020                            mov al, ' '; stosw
+  2242 00000D5B AB                              stosw
+  2243 00000D5C B059                            mov al, 'Y'; stosw
+  2244 00000D5E AB                              stosw
+  2245 00000D5F B065                            mov al, 'e'; stosw
+  2246 00000D61 AB                              stosw
+  2247 00000D62 B073                            mov al, 's'; stosw
+  2248 00000D64 AB                              stosw
+  2249                                  
+  2250 00000D65 BFC407                          mov di, 0x07C4 ; Row 15, Col 50 (approx)
+  2251 00000D68 B43E                            mov ah, 0x3E ; Yellow text on CYAN
+  2252 00000D6A B05B                            mov al, '['; stosw
+  2253 00000D6C AB                              stosw
+  2254 00000D6D B032                            mov al, '2'; stosw
+  2255 00000D6F AB                              stosw
+  2256 00000D70 B05D                            mov al, ']'; stosw
+  2257 00000D72 AB                              stosw
+  2258 00000D73 B020                            mov al, ' '; stosw
+  2259 00000D75 AB                              stosw
+  2260 00000D76 B047                            mov al, 'G'; stosw
+  2261 00000D78 AB                              stosw
+  2262 00000D79 B069                            mov al, 'i'; stosw
+  2263 00000D7B AB                              stosw
+  2264 00000D7C B076                            mov al, 'v'; stosw
+  2265 00000D7E AB                              stosw
+  2266 00000D7F B065                            mov al, 'e'; stosw
+  2267 00000D81 AB                              stosw
+  2268 00000D82 B020                            mov al, ' '; stosw
+  2269 00000D84 AB                              stosw
+  2270 00000D85 B055                            mov al, 'U'; stosw
+  2271 00000D87 AB                              stosw
+  2272 00000D88 B070                            mov al, 'p'; stosw
+  2273 00000D8A AB                              stosw
+  2274 00000D8B C3                              ret
+  2275                                  
+  2276                                  clear_extra_life_prompt_sub:
+  2277 00000D8C B95000                          mov cx, 80      ; Clear 3 full rows
+  2278 00000D8F B8203F                          mov ax, 0x3F20  ; Space char, White on CYAN attribute (match play area)
+  2279                                  
+  2280 00000D92 BFA005                          mov di, 0x05A0  ; Start of row 11
+  2281 00000D95 51                              push cx
+  2282 00000D96 F3AB                            rep stosw       
+  2283 00000D98 59                              pop cx
+  2284                                  
+  2285 00000D99 BFE006                          mov di, 0x06E0  ; Start of row 14
+  2286 00000D9C 51                              push cx
+  2287 00000D9D F3AB                            rep stosw       
+  2288 00000D9F 59                              pop cx
+  2289                                          
+  2290 00000DA0 BF8007                          mov di, 0x0780  ; Start of row 15
+  2291 00000DA3 B95000                          mov cx, 80
+  2292 00000DA6 F3AB                            rep stosw       
+  2293                                  
+  2294 00000DA8 C3                              ret
+  2295                                  
+  2296                                  scroll_scenery:
+  2297 00000DA9 BEA200                          mov si,0x00a2
+  2298 00000DAC BFA000                          mov di,0x00a0
+  2299                                  fb2_scroll:
+  2300 00000DAF B94F00                          mov cx,79
+  2301 00000DB2 F3                              repz
+  2302 00000DB3 A5                              movsw
+  2303                                          
+  2304 00000DB4 B8203F                          mov ax,0x3F20   ; Clean last character (Space, White on CYAN - to match play area)
+  2305 00000DB7 AB                              stosw
+  2306                                          
+  2307 00000DB8 AD                              lodsw
+  2308                                          
+  2309 00000DB9 81FEA20F                        cmp si,0x0fa2
+  2310 00000DBD 75F0                            jnz fb2_scroll
+  2311                                  
+  2312 00000DBF FF0EA60F                fb5:    dec word [next]
+  2313 00000DC3 8B1EA60F                        mov bx,[next]
+  2314 00000DC7 81FB0300                        cmp bx,0x03
+  2315 00000DCB 7769                            ja fb6
+  2316 00000DCD 750A                            jne fb8
+  2317                                          
+  2318 00000DCF E440                            in al,(0x40)
+  2319 00000DD1 250700                          and ax,0x0007
+  2320 00000DD4 0404                            add al,0x04
+  2321 00000DD6 A3AA0F                          mov [tall],ax
+  2322                                  fb8:    
+  2323 00000DD9 8B0EAA0F                        mov cx,[tall]
+  2324 00000DDD 09DB                            or bx,bx
+  2325 00000DDF B2B0                            mov dl,0xb0
+  2326 00000DE1 0F840A00                        jz near fb7
+  2327                                          
+  2328 00000DE5 B2DB                            mov dl,0xdb
+  2329 00000DE7 81FB0300                        cmp bx,0x03
+  2330 00000DEB 7202                            jb fb7
+  2331 00000DED B2B1                            mov dl,0xb1
+  2332                                  fb7:    
+  2333 00000DEF BF3E01                          mov di,0x013e
+  2334 00000DF2 B42A                            mov ah,0x2a     ; Bright Green attribute for pipes on Dark Green (was 0x3a for Cyan BG)
+  2335 00000DF4 88D0                            mov al,dl
+  2336 00000DF6 AB                      fb9:    stosw
+  2337 00000DF7 81C79E00                        add di,0x009e
+  2338 00000DFB E2F9                            loop fb9
+  2339                                  
+  2340 00000DFD B0DF                            mov al, 0xdf
+  2341 00000DFF AB                              stosw
+  2342                                          
+  2343 00000E00 81C7BE03                        add di, (0x009e * 6) + 10
+  2344                                  
+  2345 00000E04 B0DF                            mov al,0xdf
+  2346 00000E06 AB                              stosw
+  2347 00000E07 81C79E00                        add di,0x009e
+  2348                                  
+  2349                                  fb10:   
+  2350 00000E0B 88D0                            mov al,dl
+  2351 00000E0D AB                              stosw
+  2352 00000E0E 81C79E00                        add di,0x009e
+  2353 00000E12 81FF000F                        cmp di,0x0f00
+  2354 00000E16 72F3                            jb fb10
+  2355                                  
+  2356 00000E18 09DB                            or bx,bx
+  2357 00000E1A 751A                            jnz fb6
+  2358                                          
+  2359 00000E1C A1A00F                          mov ax,[pipe]
+  2360 00000E1F 40                              inc ax
+  2361 00000E20 A3A00F                          mov [pipe],ax
+  2362                                          
+  2363 00000E23 B103                            mov cl,3
+  2364 00000E25 D3E8                            shr ax,cl
+  2365 00000E27 B437                            mov ah,0x37
+  2366 00000E29 28C4                            sub ah,al
+  2367 00000E2B 80FC10                          cmp ah,0x10
+  2368 00000E2E 7702                            ja fb11
+  2369 00000E30 B410                            mov ah,0x10
+  2370 00000E32 8826A60F                fb11:   mov [next],ah
+  2371 00000E36 C3                      fb6:    ret
+  2372                                  
+  2373                                  
+  2374                                  wait_frame:
+  2375 00000E37 B400                            mov ah,0x00     ; Get current tick count (INT 1Ah, AH=00h)
+  2376 00000E39 CD1A                            int 0x1a        ; DX:AX = tick count
+  2377 00000E3B 52                      fb14:   push dx         ; Save current tick count (low part in DX)
+  2378 00000E3C B400                            mov ah,0x00     
+  2379 00000E3E CD1A                            int 0x1a        ; Get new tick count
+  2380 00000E40 5B                              pop bx          ; Restore previous tick count to BX
+  2381 00000E41 39D3                            cmp bx,dx       ; Compare previous DX with current DX
+  2382 00000E43 0F84F4FF                        jz near fb14         ; Loop if tick count hasn't changed
+  2383                                          
+  2384 00000E47 FF06AC0F                        inc word [frame] ; Increment global frame counter
+  2385                                  
+  2386 00000E4B 803EB40F01                      cmp byte [invincibility_active], 1 ; Is invincibility active?
+  2387 00000E50 7514                            jne invincibility_timer_done       ; If not, skip timer logic
+  2388                                          
+  2389 00000E52 813EB50F0000                    cmp word [invincibility_timer], 0  ; Timer reached zero?
+  2390 00000E58 7407                            je deactivate_invincibility_now    ; If yes, deactivate
+  2391                                          
+  2392 00000E5A FF0EB50F                        dec word [invincibility_timer]     ; Decrement timer
+  2393 00000E5E E90500                          jmp invincibility_timer_done       ; Continue
+  2394                                  
+  2395                                          deactivate_invincibility_now:
+  2396 00000E61 C606B40F00                      mov byte [invincibility_active], 0 ; Deactivate invincibility
+  2397                                  
+  2398                                          invincibility_timer_done:
+  2399                                          
+  2400 00000E66 E461                            in al,(0x61)    ; Get speaker port status
+  2401 00000E68 24FC                            and al,0xfc     ; Turn speaker off (clear bits 0 and 1)
+  2402 00000E6A E661                            out (0x61),al   ; Send to port
+  2403 00000E6C C3                              ret
+  2404                                  
+  2405 00000E6D 4F5447                          db "OTG"        ; Signature
+  2406                                  
+  2407 00000E70 55AA                            db 0x55,0xaa    ; Boot signature (though not a boot sector)
+  2408                                  
+  2409                                  clear_screen:
+  2410 00000E72 B800B8                          mov ax, 0xb800
+  2411 00000E75 8EC0                            mov es, ax      ; ES must point to video memory for stosw
+  2412 00000E77 31FF                            xor di, di      ; Start at offset 0000h in video memory
+  2413                                  
+  2414                                          ; Top: 2 rows of Blue background
+  2415 00000E79 B9A000                          mov cx, 2 * 80  ; 2 rows * 80 columns/row
+  2416 00000E7C B8201F                          mov ax, 0x1F20  ; Attribute: White FG (F) on Blue BG (1), Char: Space (0x20)
+  2417 00000E7F F3AB                            rep stosw
+  2418                                  
+  2419                                          ; Middle: 18 rows of Cyan background
+  2420 00000E81 B9A005                          mov cx, 18 * 80 ; 18 rows
+  2421 00000E84 B8203F                          mov ax, 0x3F20  ; Attribute: White FG (F) on Cyan BG (3), Char: Space
+  2422 00000E87 F3AB                            rep stosw
+  2423                                  
+  2424                                          ; Thin line: 2 rows of Green background
+  2425 00000E89 B9A000                          mov cx, 2 * 80  ; 2 rows
+  2426 00000E8C B8202F                          mov ax, 0x2F20  ; Attribute: White FG (F) on Green BG (2), Char: Space
+  2427 00000E8F F3AB                            rep stosw
+  2428                                  
+  2429                                          ; Bottom: 3 rows of Brown background
+  2430 00000E91 B9F000                          mov cx, 3 * 80  ; 3 rows
+  2431 00000E94 B8206F                          mov ax, 0x6F20  ; Attribute: White FG (F) on Brown BG (6), Char: Space
+  2432 00000E97 F3AB                            rep stosw
+  2433                                  
+  2434 00000E99 BA0000                          mov dx, 0x0000  ; Set cursor to top-left (row 0, col 0)
+  2435 00000E9C B700                            mov bh, 0x00    ; Page 0
+  2436 00000E9E B402                            mov ah, 0x02    ; Function to set cursor position
+  2437 00000EA0 CD10                            int 0x10        ; BIOS video interrupt
+  2438 00000EA2 C3                              ret
+  2439                                  
+  2440                                  display_status_messages:
+  2441 00000EA3 60                          pusha                   ; Save all general registers
+  2442 00000EA4 06                          push es                 
+  2443 00000EA5 1E                          push ds                 
+  2444                                  
+  2445 00000EA6 B800B8                      mov ax, 0xb800          ; Video segment
+  2446 00000EA9 8EC0                        mov es, ax
+  2447 00000EAB 8ED8                        mov ds, ax              
+  2448                                  
+  2449 00000EAD BFBA0E                      mov di, (23*80*2) + (45*2)
+  2450 00000EB0 B92300                      mov cx, 35
+  2451 00000EB3 B8203F                      mov ax, 0x3F20              ; Space char ' ' with White on CYAN
+  2452 00000EB6 FC                          cld
+  2453 00000EB7 F3AB                        rep stosw
+  2454                                  
+  2455 00000EB9 803EB40F01                  cmp byte [invincibility_active], 1
+  2456 00000EBE 7449                        je .display_active_duration_info
+  2457                                  
+  2458 00000EC0 BFD20E                      mov di, (23*80*2) + (57*2)
+  2459 00000EC3 B43E                        mov ah, 0x3E                ; Yellow text on CYAN attribute
+  2460                                  
+  2461 00000EC5 B049                        mov al, 'I'; stosw 
+  2462 00000EC7 AB                          stosw
+  2463 00000EC8 B06E                        mov al, 'n'; stosw
+  2464 00000ECA AB                          stosw
+  2465 00000ECB B076                        mov al, 'v'; stosw
+  2466 00000ECD AB                          stosw
+  2467 00000ECE B069                        mov al, 'i'; stosw
+  2468 00000ED0 AB                          stosw
+  2469 00000ED1 B06E                        mov al, 'n'; stosw
+  2470 00000ED3 AB                          stosw
+  2471 00000ED4 B063                        mov al, 'c'; stosw
+  2472 00000ED6 AB                          stosw
+  2473 00000ED7 B069                        mov al, 'i'; stosw
+  2474 00000ED9 AB                          stosw
+  2475 00000EDA B062                        mov al, 'b'; stosw
+  2476 00000EDC AB                          stosw
+  2477 00000EDD B069                        mov al, 'i'; stosw
+  2478 00000EDF AB                          stosw
+  2479 00000EE0 B06C                        mov al, 'l'; stosw
+  2480 00000EE2 AB                          stosw
+  2481 00000EE3 B069                        mov al, 'i'; stosw
+  2482 00000EE5 AB                          stosw
+  2483 00000EE6 B074                        mov al, 't'; stosw
+  2484 00000EE8 AB                          stosw
+  2485 00000EE9 B079                        mov al, 'y'; stosw
+  2486 00000EEB AB                          stosw
+  2487 00000EEC B020                        mov al, ' '; stosw
+  2488 00000EEE AB                          stosw
+  2489 00000EEF B028                        mov al, '('; stosw
+  2490 00000EF1 AB                          stosw
+  2491 00000EF2 B049                        mov al, 'I'; stosw          
+  2492 00000EF4 AB                          stosw
+  2493 00000EF5 B029                        mov al, ')'; stosw
+  2494 00000EF7 AB                          stosw
+  2495 00000EF8 B03A                        mov al, ':'; stosw
+  2496 00000EFA AB                          stosw
+  2497 00000EFB B020                        mov al, ' '; stosw
+  2498 00000EFD AB                          stosw
+  2499                                  
+  2500 00000EFE B43E                        mov ah, 0x3E
+  2501 00000F00 A0B30F                      mov al, [invincibility_uses_left]
+  2502 00000F03 0430                        add al, '0'
+  2503 00000F05 AB                          stosw                       
+  2504 00000F06 E95600                      jmp .status_display_done_final 
+  2505                                  
+  2506                                  .display_active_duration_info:
+  2507 00000F09 BFE20E                      mov di, (23*80*2) + (65*2)
+  2508 00000F0C B43A                        mov ah, 0x3A                ; Bright Green on CYAN attribute
+  2509                                  
+  2510 00000F0E B049                        mov al, 'I'; stosw 
+  2511 00000F10 AB                          stosw
+  2512 00000F11 B06E                        mov al, 'n'; stosw
+  2513 00000F13 AB                          stosw
+  2514 00000F14 B076                        mov al, 'v'; stosw
+  2515 00000F16 AB                          stosw
+  2516 00000F17 B069                        mov al, 'i'; stosw
+  2517 00000F19 AB                          stosw
+  2518 00000F1A B06E                        mov al, 'n'; stosw
+  2519 00000F1C AB                          stosw
+  2520 00000F1D B063                        mov al, 'c'; stosw
+  2521 00000F1F AB                          stosw
+  2522 00000F20 B069                        mov al, 'i'; stosw
+  2523 00000F22 AB                          stosw
+  2524 00000F23 B062                        mov al, 'b'; stosw
+  2525 00000F25 AB                          stosw
+  2526 00000F26 B06C                        mov al, 'l'; stosw
+  2527 00000F28 AB                          stosw
+  2528 00000F29 B065                        mov al, 'e'; stosw
+  2529 00000F2B AB                          stosw
+  2530 00000F2C B03A                        mov al, ':'; stosw
+  2531 00000F2E AB                          stosw
+  2532 00000F2F B020                        mov al, ' '; stosw
+  2533 00000F31 AB                          stosw
+  2534                                  
+  2535 00000F32 A1B50F                      mov ax, [invincibility_timer]
+  2536 00000F35 31D2                        xor dx, dx
+  2537 00000F37 BB1200                      mov bx, 18
+  2538 00000F3A 3D0000                      cmp ax, 0
+  2539 00000F3D 7414                        je .display_zero_seconds_now
+  2540                                  
+  2541 00000F3F F7F3                        div bx
+  2542                                  
+  2543 00000F41 3D0000                      cmp ax, 0
+  2544 00000F44 750F                        jne .display_the_calculated_seconds
+  2545 00000F46 813EB50F0000                cmp word [invincibility_timer], 0 
+  2546 00000F4C 7407                        je .display_the_calculated_seconds
+  2547 00000F4E B001                        mov al, 1
+  2548 00000F50 E90200                      jmp .convert_seconds_to_ascii
+  2549                                  
+  2550                                  .display_zero_seconds_now:
+  2551 00000F53 B000                        mov al, 0
+  2552                                  
+  2553                                  .display_the_calculated_seconds:
+  2554                                  .convert_seconds_to_ascii:
+  2555 00000F55 0430                        add al, '0'
+  2556 00000F57 B43A                        mov ah, 0x3A
+  2557 00000F59 AB                          stosw
+  2558                                  
+  2559 00000F5A B073                        mov al, 's'
+  2560 00000F5C B43A                        mov ah, 0x3A
+  2561 00000F5E AB                          stosw
+  2562                                  
+  2563                                  .status_display_done_final:
+  2564 00000F5F 1F                          pop ds
+  2565 00000F60 07                          pop es
+  2566 00000F61 61                          popa
+  2567 00000F62 C3                          ret
+  2568                                  
+  2569                                  
+  2570                                  ; --- Score Display Subroutine ---
+  2571                                  
+  2572                                  ; Display the player's score
+  2573                                  show_current_score:
+  2574                                          ; Show current score
+  2575 00000F63 BFC003                          mov di, 0x03C0  ; Row 8, centered
+  2576 00000F66 B8593E                          mov ax, 0x3e59  ; 'Y' in yellow
+  2577 00000F69 AB                              stosw
+  2578 00000F6A B06F                            mov al, 0x6f    ; 'o'
+  2579 00000F6C AB                              stosw
+  2580 00000F6D B075                            mov al, 0x75    ; 'u'
+  2581 00000F6F AB                              stosw
+  2582 00000F70 B072                            mov al, 0x72    ; 'r'
+  2583 00000F72 AB                              stosw
+  2584 00000F73 B020                            mov al, 0x20    ; ' '
+  2585 00000F75 AB                              stosw
+  2586 00000F76 B053                            mov al, 0x53    ; 'S'
+  2587 00000F78 AB                              stosw
+  2588 00000F79 B063                            mov al, 0x63    ; 'c'
+  2589 00000F7B AB                              stosw
+  2590 00000F7C B06F                            mov al, 0x6f    ; 'o'
+  2591 00000F7E AB                              stosw
+  2592 00000F7F B072                            mov al, 0x72    ; 'r'
+  2593 00000F81 AB                              stosw
+  2594 00000F82 B065                            mov al, 0x65    ; 'e'
+  2595 00000F84 AB                              stosw
+  2596 00000F85 B03A                            mov al, 0x3a    ; ':'
+  2597 00000F87 AB                              stosw
+  2598 00000F88 B020                            mov al, 0x20    ; ' '
+  2599 00000F8A AB                              stosw
+  2600                                          
+  2601                                          ; Convert and display the score
+  2602 00000F8B A1A20F                          mov ax, [score]
+  2603 00000F8E BB0A00                          mov bx, 10      ; Divisor
+  2604 00000F91 31C9                            xor cx, cx      ; Digit counter
+  2605                                          
+  2606                                  score_push_digits:
+  2607 00000F93 31D2                            xor dx, dx      ; Clear high word for division
+  2608 00000F95 F7F3                            div bx          ; AX = AX/10, DX = remainder
+  2609 00000F97 52                              push dx         ; Save digit
+  2610 00000F98 41                              inc cx          ; Count digits
+  2611 00000F99 09C0                            or ax, ax       ; Check if quotient is 0
+  2612 00000F9B 75F6                            jnz score_push_digits ; If not, continue
+  2613                                          
+  2614                                  score_pop_and_display:
+  2615 00000F9D 58                              pop ax          ; Get digit
+  2616 00000F9E 0430                            add al, '0'     ; Convert to ASCII
+  2617 00000FA0 B430                            mov ah, 0x30    ; White color
+  2618 00000FA2 AB                              stosw
+  2619 00000FA3 E2F8                            loop score_pop_and_display
+  2620                                          
+  2621 00000FA5 C3                              ret
+  2622                                  
+  2623                                  ; --- End of Score Display Subroutine ---
+  2624                                  
+  2625                                  pipe:   equ 0x0fa0  
+  2626                                  score:  equ 0x0fa2  
+  2627                                  grav:   equ 0x0fa4  
+  2628                                  next:   equ 0x0fa6  
+  2629                                  bird:   equ 0x0fa8  
+  2630                                  tall:   equ 0x0faa  
+  2631                                  frame:  equ 0x0fac  
+  2632                                  user_choice: equ 0x0fae 
+  2633                                  
+  2634                                  extra_life_available: equ 0x0faf 
+  2635                                  saved_crash_di:     equ 0x0fb0   
+  2636                                  paused:  equ 0x0fb2   
+  2637                                  
+  2638                                  invincibility_uses_left: equ 0x0fb3 
+  2639                                  invincibility_active:    equ 0x0fb4 
+  2640                                  invincibility_timer:     equ 0x0fb5 ; word (ends 0x0fb6)
+  2641 00000FA6 0000                    high_score:      dw 0      ; Variable to store the highest score achieved (2 bytes)
+  2642                                  
+  2643                                  exit_to_dos:
+  2644 00000FA8 CD20                        int 0x20    ; Call DOS terminate program function
